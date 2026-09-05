@@ -466,6 +466,10 @@ tr.clickable:hover{background:var(--green-light);}
     <div class="field"><label>Harga Beli (Rp)</label><input type="number" id="modalProdukHargaBeli" min="0" value="0"></div>
     <div class="field"><label>Harga Jual (Rp)</label><input type="number" id="modalProdukHargaJual" min="0"></div>
     <div class="field"><label>Harga Reseller (Rp)</label><input type="number" id="modalProdukHargaReseller" min="0" placeholder="Opsional"></div>
+    <div class="field" style="flex-direction:row;align-items:center;gap:8px;">
+      <input type="checkbox" id="modalProdukPakaiPromo" style="width:18px;height:18px;">
+      <label style="text-transform:none;font-size:13.5px;margin:0;">Ikut promo bundling (3 pcs = Rp5.000)</label>
+    </div>
     <div class="field"><label>Status</label><select id="modalProdukStatus"><option value="aktif">Aktif</option><option value="nonaktif">Nonaktif</option></select></div>
     <div class="modal-actions">
       <button class="btn btn-outline" id="modalProdukCancel">Batal</button>
@@ -539,7 +543,7 @@ function yyMMdd(dateStr){ return dateStr.slice(2,4)+dateStr.slice(5,7)+dateStr.s
 function tglEfektif(o){ return o.tanggal_pesan || o.tanggal; }
 
 /* ================= MESIN HITUNG HARGA (sama seperti versi lama) ================= */
-function hitungItemClient(tipeInput, hargaSatuan, inputValue, hargaReseller, isReseller){
+function hitungItemClient(tipeInput, hargaSatuan, inputValue, hargaReseller, isReseller, pakaiPromo){
   inputValue = Number(inputValue)||0;
   if(isReseller && Number(hargaReseller)>0){
     if(tipeInput==='rp'){
@@ -557,6 +561,20 @@ function hitungItemClient(tipeInput, hargaSatuan, inputValue, hargaReseller, isR
     const qty = Math.max(1, Math.round(inputValue));
     const subtotal = qty*hargaSatuan;
     return {qty, hargaNormal:subtotal, diskon:0, subtotal};
+  }
+  if(pakaiPromo===false){
+    // produk ini tidak ikut promo bundling -- harga flat murni per pcs
+    if(tipeInput==='pcs'){
+      const qty = Math.max(1, Math.round(inputValue));
+      const subtotal = qty*hargaSatuan;
+      return {qty, hargaNormal:subtotal, diskon:0, subtotal};
+    }
+    if(tipeInput==='rp'){
+      const rp = Math.max(0, Math.round(inputValue));
+      const qty = Math.max(1, Math.round(rp/hargaSatuan));
+      const normal = qty*hargaSatuan;
+      return {qty, hargaNormal:normal, diskon:normal-rp, subtotal:rp};
+    }
   }
   if(tipeInput==='pcs'){
     const qty = Math.max(1, Math.round(inputValue));
@@ -652,31 +670,33 @@ async function api(action, payload){
         const orders = allOrders||[];
         const todayKey = wibDateStr();
         const ordersToday = orders.filter(o=>tglEfektif(o)===todayKey);
-        const omzetHariIni = ordersToday.reduce((s,o)=>s+Number(o.total||0),0);
-        const totalPcsHariIni = await hitungTotalPcs(ordersToday);
+        const ordersTodayAktif = ordersToday.filter(o=>o.status_pesanan!=='Dibatalkan');
+        const omzetHariIni = ordersTodayAktif.reduce((s,o)=>s+Number(o.total||0),0);
+        const totalPcsHariIni = await hitungTotalPcs(ordersTodayAktif);
         const belumSelesai = ordersToday.filter(o=>['Pesanan Baru','Diproses','Siap Diambil / Siap Dikirim'].indexOf(o.status_pesanan)>-1).length;
-        const belumDibayar = ordersToday.filter(o=>o.status_pembayaran!=='Lunas').length;
+        const belumDibayar = ordersTodayAktif.filter(o=>o.status_pembayaran!=='Lunas').length;
         const terbaru = [...orders].sort((a,b)=>String(b.nomor_pesanan).localeCompare(String(a.nomor_pesanan))).slice(0,8);
         const chart = [];
         for(let i=-6;i<=3;i++){
           const d = new Date(); d.setDate(d.getDate()+i);
           const key = wibDateStr(d);
-          const omzetHari = orders.filter(o=>tglEfektif(o)===key).reduce((s,o)=>s+Number(o.total||0),0);
+          const omzetHari = orders.filter(o=>tglEfektif(o)===key && o.status_pesanan!=='Dibatalkan').reduce((s,o)=>s+Number(o.total||0),0);
           chart.push({tanggal:key.slice(8,10)+'/'+key.slice(5,7), tanggalKey:key, omzet:omzetHari});
         }
-        return {status:'ok', totalPesananHariIni:ordersToday.length, omzetHariIni, totalPcsHariIni, belumSelesai, belumDibayar, pesananTerbaru:terbaru, chart};
+        return {status:'ok', totalPesananHariIni:ordersTodayAktif.length, omzetHariIni, totalPcsHariIni, belumSelesai, belumDibayar, pesananTerbaru:terbaru, chart};
       }
 
       case 'dashboardByDate': {
         const { data: allOrders } = await sb.from('pesanan').select('*');
         const targetKey = payload.tanggal;
         const ordersHari = (allOrders||[]).filter(o=>tglEfektif(o)===targetKey);
-        const omzet = ordersHari.reduce((s,o)=>s+Number(o.total||0),0);
-        const totalPcs = await hitungTotalPcs(ordersHari);
+        const ordersHariAktif = ordersHari.filter(o=>o.status_pesanan!=='Dibatalkan');
+        const omzet = ordersHariAktif.reduce((s,o)=>s+Number(o.total||0),0);
+        const totalPcs = await hitungTotalPcs(ordersHariAktif);
         const belumSelesai = ordersHari.filter(o=>['Pesanan Baru','Diproses','Siap Diambil / Siap Dikirim'].indexOf(o.status_pesanan)>-1).length;
-        const belumDibayar = ordersHari.filter(o=>o.status_pembayaran!=='Lunas').length;
+        const belumDibayar = ordersHariAktif.filter(o=>o.status_pembayaran!=='Lunas').length;
         const pesanan = [...ordersHari].sort((a,b)=>String(b.nomor_pesanan).localeCompare(String(a.nomor_pesanan)));
-        return {status:'ok', tanggal:targetKey, totalPesanan:ordersHari.length, omzet, totalPcs, belumSelesai, belumDibayar, pesanan};
+        return {status:'ok', tanggal:targetKey, totalPesanan:ordersHariAktif.length, omzet, totalPcs, belumSelesai, belumDibayar, pesanan};
       }
 
       case 'createOrder':
@@ -709,7 +729,7 @@ async function api(action, payload){
         for(const it of items){
           const produk = (produkRows||[]).find(p=>p.id===it.productId);
           if(!produk) return {status:'error', message:'Produk tidak ditemukan: '+it.productId};
-          const hasil = hitungItemClient(it.tipeInput, Number(produk.harga_jual), it.inputValue, produk.harga_reseller, isReseller);
+          const hasil = hitungItemClient(it.tipeInput, Number(produk.harga_jual), it.inputValue, produk.harga_reseller, isReseller, produk.pakai_promo);
           subtotalPesanan += hasil.subtotal;
           itemResults.push({ product_id:produk.id, nama_produk:produk.nama_produk, tipe_input:it.tipeInput, input_value:it.inputValue, harga_satuan:produk.harga_jual, qty:hasil.qty, harga_normal:hasil.hargaNormal, diskon_item:hasil.diskon, subtotal:hasil.subtotal, keterangan:it.keterangan||'' });
         }
@@ -1319,14 +1339,14 @@ function updateItemSubline(it){
   const produk = produkList.find(p=>p.id===it.productId);
   if(!produk){ el.innerHTML=''; return; }
   const isReseller = document.getElementById('ordIsReseller').checked;
-  const hasil = hitungItemClient(it.tipeInput, Number(produk.harga_jual), it.inputValue, produk.harga_reseller, isReseller);
+  const hasil = hitungItemClient(it.tipeInput, Number(produk.harga_jual), it.inputValue, produk.harga_reseller, isReseller, produk.pakai_promo);
   el.innerHTML = `<span>${hasil.qty} pcs${hasil.diskon>0?' · hemat '+rupiah(hasil.diskon):''}</span><b>${rupiah(hasil.subtotal)}</b>`;
 }
 function getOrderItemResults(){
   const isReseller = document.getElementById('ordIsReseller').checked;
   return orderItems.filter(it=>it.productId).map(it=>{
     const produk = produkList.find(p=>p.id===it.productId);
-    const hasil = hitungItemClient(it.tipeInput, Number(produk.harga_jual), it.inputValue, produk.harga_reseller, isReseller);
+    const hasil = hitungItemClient(it.tipeInput, Number(produk.harga_jual), it.inputValue, produk.harga_reseller, isReseller, produk.pakai_promo);
     return Object.assign({produk}, it, hasil);
   });
 }
@@ -1631,6 +1651,7 @@ function openProdukModal(p){
   document.getElementById('modalProdukHargaBeli').value = p ? p.harga_beli : 0;
   document.getElementById('modalProdukHargaJual').value = p ? p.harga_jual : '';
   document.getElementById('modalProdukHargaReseller').value = p ? (p.harga_reseller||'') : '';
+  document.getElementById('modalProdukPakaiPromo').checked = p ? (p.pakai_promo!==false) : true;
   document.getElementById('modalProdukStatus').value = p ? p.status : 'aktif';
   document.getElementById('modalProduk').classList.add('show');
 }
@@ -1647,6 +1668,7 @@ document.getElementById('modalProdukSave').addEventListener('click', async ()=>{
     harga_beli: Number(document.getElementById('modalProdukHargaBeli').value)||0,
     harga_jual: Number(document.getElementById('modalProdukHargaJual').value)||0,
     harga_reseller: Number(document.getElementById('modalProdukHargaReseller').value)||0,
+    pakai_promo: document.getElementById('modalProdukPakaiPromo').checked,
     status: document.getElementById('modalProdukStatus').value
   };
   const res = await api('saveProduct', {produk});
