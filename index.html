@@ -651,9 +651,12 @@ async function api(action, payload){
     switch(action){
 
       case 'login': {
-        const { data } = await sb.from('akun').select('nama,level').eq('username', payload.username).eq('password', payload.password).maybeSingle();
-        if(!data) return {status:'error', message:'Username atau password salah.'};
-        return {status:'ok', nama:data.nama, level:data.level};
+        const emailSamaran = String(payload.username||'').toLowerCase().trim() + '@bakpao-internal.local';
+        const { data: authData, error: authErr } = await sb.auth.signInWithPassword({ email: emailSamaran, password: payload.password });
+        if(authErr || !authData.user) return {status:'error', message:'Username atau password salah.'};
+        const { data: profile, error: profErr } = await sb.from('profiles').select('nama,level').eq('id', authData.user.id).maybeSingle();
+        if(profErr || !profile) return {status:'error', message:'Login berhasil tapi profil belum ditemukan. Hubungi admin.'};
+        return {status:'ok', nama:profile.nama, level:profile.level};
       }
 
       case 'initData': {
@@ -1049,12 +1052,6 @@ document.querySelectorAll('[data-goto]').forEach(b=>b.addEventListener('click', 
 /* ================= LOGIN ================= */
 document.getElementById('loginBtn').addEventListener('click', doLogin);
 document.getElementById('loginPassword').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
-const SESSION_KEY = 'bakpao_session';
-const SESSION_DURATION_MS = 24 * 60 * 60 * 1000; // 24 jam
-
-function simpanSesi(){
-  localStorage.setItem(SESSION_KEY, JSON.stringify({ nama: currentUser.nama, level: currentUser.level, loginTime: Date.now() }));
-}
 function bukaAppSetelahLogin(){
   document.getElementById('userInfo').textContent = currentUser.nama + ' (' + currentUser.level + ')';
   document.getElementById('loginScreen').style.display='none';
@@ -1063,14 +1060,11 @@ function bukaAppSetelahLogin(){
 }
 async function cobaSesiTersimpan(){
   try{
-    const raw = localStorage.getItem(SESSION_KEY);
-    if(!raw) return false;
-    const sesi = JSON.parse(raw);
-    if(!sesi || !sesi.loginTime || (Date.now() - sesi.loginTime) > SESSION_DURATION_MS){
-      localStorage.removeItem(SESSION_KEY);
-      return false;
-    }
-    currentUser = { nama: sesi.nama, level: sesi.level };
+    const { data: { session } } = await sb.auth.getSession();
+    if(!session || !session.user) return false;
+    const { data: profile } = await sb.from('profiles').select('nama,level').eq('id', session.user.id).maybeSingle();
+    if(!profile) return false;
+    currentUser = { nama: profile.nama, level: profile.level };
     bukaAppSetelahLogin();
     await loadMasterData();
     switchView('dashboard');
@@ -1090,7 +1084,6 @@ async function doLogin(){
     const data = await api('login', {username, password});
     if(data.status==='ok'){
       currentUser = { nama:data.nama, level:data.level };
-      simpanSesi();
       bukaAppSetelahLogin();
       await loadMasterData();
       switchView('dashboard');
@@ -1099,13 +1092,13 @@ async function doLogin(){
       errBox.className='login-error show';
     }
   }catch(e){
-    errBox.textContent='Gagal terhubung ke server. Cek URL Apps Script.';
+    errBox.textContent='Gagal terhubung ke server. Cek koneksi internet kamu.';
     errBox.className='login-error show';
   } finally { btn.disabled=false; btn.textContent='Masuk'; }
 }
-document.getElementById('logoutBtn').addEventListener('click', ()=>{
+document.getElementById('logoutBtn').addEventListener('click', async ()=>{
+  await sb.auth.signOut();
   currentUser=null;
-  localStorage.removeItem(SESSION_KEY);
   document.getElementById('appShell').style.display='none';
   document.getElementById('loginScreen').style.display='flex';
   document.getElementById('loginUsername').value=''; document.getElementById('loginPassword').value='';
