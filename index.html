@@ -1461,6 +1461,9 @@ function switchViewRaw(name){
 function renderDetail(){
   const {order, items, invoices} = currentOrder;
   const hasInvoice = invoices && invoices.length>0;
+  const isAktif = ['Pesanan Baru','Diproses','Siap Diambil / Siap Dikirim'].indexOf(order.status_pesanan)>-1;
+  const isSelesai = order.status_pesanan==='Selesai';
+  const isDibatalkan = order.status_pesanan==='Dibatalkan';
   document.getElementById('detailContent').innerHTML = `
     <div class="card">
       <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;">
@@ -1491,15 +1494,16 @@ function renderDetail(){
         <div class="row"><span>Sisa Tagihan</span><span class="mono">${rupiah(order.sisa_tagihan)}</span></div>
       </div>
       ${order.catatan ? `<p style="font-size:13px;color:var(--ink-soft);margin-top:10px;"><b>Catatan:</b> ${order.catatan}</p>` : ''}
-      ${order.status_pesanan==='Selesai' ? `<p style="font-size:12.5px;color:var(--ink-soft);margin-top:10px;">🔒 Pesanan sudah Selesai — item, jumlah, dan status tidak bisa diubah lagi untuk jaga keakuratan data.</p>` : ''}
+      ${isSelesai ? `<p style="font-size:12.5px;color:var(--ink-soft);margin-top:10px;">🔒 Pesanan sudah Selesai.</p>` : ''}
+      ${isDibatalkan ? `<p style="font-size:12.5px;color:var(--ink-soft);margin-top:10px;">🔒 Pesanan dibatalkan — cuma status yang bisa diubah (misal kalau salah batalkan).</p>` : ''}
 
       <div class="quickbtns">
-        ${(order.status_pesanan!=='Dibatalkan' && !(order.status_pesanan==='Selesai' && order.status_pembayaran==='Lunas')) ? `<button class="btn btn-primary" onclick="selesaikanDanLunas()">✅ Selesai &amp; Lunas</button>` : ''}
-        ${(canEditOrder() && order.status_pesanan!=='Selesai') ? `<button class="btn btn-outline" onclick="editOrder()">✏️ Edit Pesanan</button>` : ''}
-        ${order.status_pesanan!=='Selesai' ? `<button class="btn btn-outline" onclick="openStatusModal()">Ubah Status</button>` : ''}
-        ${order.status_pesanan!=='Dibatalkan' ? `<button class="btn btn-outline" onclick="openBayarModal()">Catat Pembayaran</button>` : ''}
-        ${hasInvoice ? `<button class="btn btn-primary" onclick="viewInvoice()">Lihat Invoice</button>` : `<button class="btn btn-primary" onclick="buatInvoice()">Buat Invoice</button>`}
-        <button class="btn btn-wa" onclick="kirimWaPesanan()">Kirim Info Pesanan via WhatsApp</button>
+        ${isAktif ? `<button class="btn btn-primary" onclick="selesaikanDanLunas()">✅ Selesai &amp; Lunas</button>` : ''}
+        ${(isAktif && canEditOrder()) ? `<button class="btn btn-outline" onclick="editOrder()">✏️ Edit Pesanan</button>` : ''}
+        ${(isAktif || isDibatalkan) ? `<button class="btn btn-outline" onclick="openStatusModal()">Ubah Status</button>` : ''}
+        ${(isAktif || isSelesai) ? `<button class="btn btn-outline" onclick="openBayarModal()">Catat Pembayaran</button>` : ''}
+        ${(isAktif || isSelesai) ? (hasInvoice ? `<button class="btn btn-primary" onclick="viewInvoice()">Lihat Invoice</button>` : `<button class="btn btn-primary" onclick="buatInvoice()">Buat Invoice</button>`) : ''}
+        ${isAktif ? `<button class="btn btn-wa" onclick="kirimWaPesanan()">Kirim Info Pesanan via WhatsApp</button>` : ''}
       </div>
     </div>`;
 }
