@@ -304,6 +304,7 @@ tr.clickable:hover{background:var(--green-light);}
     <div class="tabs" style="background:var(--green-light);margin-top:14px;border-radius:12px;padding:4px;">
       <button data-submaster="produk" class="submaster-btn active" style="color:var(--green-dark);border-radius:9px;">Produk</button>
       <button data-submaster="pelanggan" class="submaster-btn" style="color:var(--green-dark);border-radius:9px;">Pelanggan</button>
+      <button data-submaster="promo" class="submaster-btn" style="color:var(--green-dark);border-radius:9px;">Promo</button>
     </div>
 
     <div class="submaster active" id="submaster-produk" style="margin-top:14px;">
@@ -313,6 +314,11 @@ tr.clickable:hover{background:var(--green-light);}
 
     <div class="submaster" id="submaster-pelanggan" style="margin-top:14px;display:none;">
       <div class="card"><div class="tablewrap"><table id="pelangganTable"></table></div></div>
+    </div>
+
+    <div class="submaster" id="submaster-promo" style="margin-top:14px;display:none;">
+      <div class="quickbtns" style="margin-top:0;"><button id="addPromoBtn">+ Tambah Promo</button></div>
+      <div class="card"><div class="tablewrap"><table id="promoTable"></table></div></div>
     </div>
   </section>
 
@@ -453,6 +459,33 @@ tr.clickable:hover{background:var(--green-light);}
   </div>
 </div>
 
+<!-- MODAL: Promo -->
+<div class="modal-bg" id="modalPromo">
+  <div class="modal">
+    <h3 id="modalPromoTitle">Tambah Promo</h3>
+    <input type="hidden" id="modalPromoId">
+    <div class="field"><label>Nama Promo</label><input type="text" id="modalPromoNama" placeholder="Contoh: Bundling 3 pcs = Rp5.000"></div>
+    <div class="field"><label>Tipe Promo</label>
+      <select id="modalPromoTipe">
+        <option value="bundling">Bundling (beli X pcs harga tetap)</option>
+        <option value="diskon_flat">Diskon Flat per pcs</option>
+      </select>
+    </div>
+    <div id="promoFieldBundling">
+      <div class="field"><label>Jumlah pcs per bundle</label><input type="number" id="modalPromoBundleQty" min="1" value="3"></div>
+      <div class="field"><label>Harga per bundle (Rp)</label><input type="number" id="modalPromoBundleHarga" min="0" value="5000"></div>
+    </div>
+    <div id="promoFieldDiskon" style="display:none;">
+      <div class="field"><label>Diskon per pcs (Rp)</label><input type="number" id="modalPromoDiskonPcs" min="0" value="100"></div>
+    </div>
+    <div class="field"><label>Status</label><select id="modalPromoStatus"><option value="aktif">Aktif</option><option value="nonaktif">Nonaktif</option></select></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="modalPromoCancel">Batal</button>
+      <button class="btn btn-primary" id="modalPromoSave">Simpan</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: Produk -->
 <div class="modal-bg" id="modalProduk">
   <div class="modal">
@@ -466,9 +499,8 @@ tr.clickable:hover{background:var(--green-light);}
     <div class="field"><label>Harga Beli (Rp)</label><input type="number" id="modalProdukHargaBeli" min="0" value="0"></div>
     <div class="field"><label>Harga Jual (Rp)</label><input type="number" id="modalProdukHargaJual" min="0"></div>
     <div class="field"><label>Harga Reseller (Rp)</label><input type="number" id="modalProdukHargaReseller" min="0" placeholder="Opsional"></div>
-    <div class="field" style="flex-direction:row;align-items:center;gap:8px;">
-      <input type="checkbox" id="modalProdukPakaiPromo" style="width:18px;height:18px;">
-      <label style="text-transform:none;font-size:13.5px;margin:0;">Ikut promo bundling (3 pcs = Rp5.000)</label>
+    <div class="field"><label>Promo yang Berlaku</label>
+      <select id="modalProdukPromo"><option value="">Tidak ada promo (harga flat)</option></select>
     </div>
     <div class="field"><label>Urutan Tampil (angka kecil = tampil dulu)</label><input type="number" id="modalProdukUrutan" value="0"></div>
     <div class="field"><label>Status</label><select id="modalProdukStatus"><option value="aktif">Aktif</option><option value="nonaktif">Nonaktif</option></select></div>
@@ -509,6 +541,7 @@ const NAMA_USAHA = 'Bakpao Ijo Gembul';
 let currentUser = null;
 let produkList = [];
 let pelangganList = [];
+let promoList = [];
 let orderItems = []; // { rowId, productId, tipeInput, inputValue, keterangan }
 let currentOrder = null; // { order, items, invoices, payments }
 let riwayatCache = [];
@@ -544,7 +577,7 @@ function yyMMdd(dateStr){ return dateStr.slice(2,4)+dateStr.slice(5,7)+dateStr.s
 function tglEfektif(o){ return o.tanggal_pesan || o.tanggal; }
 
 /* ================= MESIN HITUNG HARGA (sama seperti versi lama) ================= */
-function hitungItemClient(tipeInput, hargaSatuan, inputValue, hargaReseller, isReseller, pakaiPromo){
+function hitungItemClient(tipeInput, hargaSatuan, inputValue, hargaReseller, isReseller, promo){
   inputValue = Number(inputValue)||0;
   if(isReseller && Number(hargaReseller)>0){
     if(tipeInput==='rp'){
@@ -563,8 +596,8 @@ function hitungItemClient(tipeInput, hargaSatuan, inputValue, hargaReseller, isR
     const subtotal = qty*hargaSatuan;
     return {qty, hargaNormal:subtotal, diskon:0, subtotal};
   }
-  if(pakaiPromo===false){
-    // produk ini tidak ikut promo bundling -- harga flat murni per pcs
+  if(!promo || promo.status!=='aktif'){
+    // tidak ada promo terpasang -- harga flat murni per pcs
     if(tipeInput==='pcs'){
       const qty = Math.max(1, Math.round(inputValue));
       const subtotal = qty*hargaSatuan;
@@ -577,16 +610,35 @@ function hitungItemClient(tipeInput, hargaSatuan, inputValue, hargaReseller, isR
       return {qty, hargaNormal:normal, diskon:normal-rp, subtotal:rp};
     }
   }
+  if(promo && promo.tipe==='diskon_flat'){
+    const potongan = Number(promo.diskon_per_pcs)||0;
+    const hargaPromo = Math.max(0, hargaSatuan - potongan);
+    if(tipeInput==='pcs'){
+      const qty = Math.max(1, Math.round(inputValue));
+      const normal = qty*hargaSatuan;
+      const subtotal = qty*hargaPromo;
+      return {qty, hargaNormal:normal, diskon:normal-subtotal, subtotal};
+    }
+    if(tipeInput==='rp'){
+      const rp = Math.max(0, Math.round(inputValue));
+      const qty = Math.max(1, Math.round(rp/hargaPromo));
+      const normal = qty*hargaSatuan;
+      return {qty, hargaNormal:normal, diskon:normal-rp, subtotal:rp};
+    }
+  }
+  // default: promo tipe bundling
+  const bQty = (promo && promo.bundle_qty) ? Number(promo.bundle_qty) : BUNDLE_QTY;
+  const bHarga = (promo && promo.bundle_harga) ? Number(promo.bundle_harga) : BUNDLE_HARGA;
   if(tipeInput==='pcs'){
     const qty = Math.max(1, Math.round(inputValue));
     const normal = qty*hargaSatuan;
-    const bundles = Math.floor(qty/BUNDLE_QTY), sisa = qty%BUNDLE_QTY;
-    const bundled = bundles*BUNDLE_HARGA + sisa*hargaSatuan;
+    const bundles = Math.floor(qty/bQty), sisa = qty%bQty;
+    const bundled = bundles*bHarga + sisa*hargaSatuan;
     return {qty, hargaNormal:normal, diskon:normal-bundled, subtotal:bundled};
   }
   if(tipeInput==='rp'){
     const rp = Math.max(0, Math.round(inputValue));
-    const qty = Math.round(rp*BUNDLE_QTY/BUNDLE_HARGA);
+    const qty = Math.round(rp*bQty/bHarga);
     const normal = qty*hargaSatuan;
     return {qty, hargaNormal:normal, diskon:normal-rp, subtotal:rp};
   }
@@ -660,13 +712,35 @@ async function api(action, payload){
       }
 
       case 'initData': {
-        const [{data:produk, error:e1}, {data:pelanggan, error:e2}] = await Promise.all([
+        const [{data:produk, error:e1}, {data:pelanggan, error:e2}, {data:promo, error:e3}] = await Promise.all([
           sb.from('produk').select('*').eq('status','aktif'),
-          sb.from('pelanggan').select('*')
+          sb.from('pelanggan').select('*'),
+          sb.from('promo').select('*')
         ]);
         if(e1) return {status:'error', message:e1.message};
         if(e2) return {status:'error', message:e2.message};
-        return {status:'ok', produk, pelanggan};
+        if(e3) return {status:'error', message:e3.message};
+        return {status:'ok', produk, pelanggan, promo: promo||[]};
+      }
+
+      case 'listPromo': {
+        const { data, error } = await sb.from('promo').select('*');
+        if(error) return {status:'error', message:error.message};
+        return {status:'ok', promo: data||[]};
+      }
+
+      case 'savePromo': {
+        const p = payload.promo || {};
+        if(!p.nama || !p.tipe) return {status:'error', message:'Nama dan tipe promo wajib diisi.'};
+        if(p.id){
+          const { error } = await sb.from('promo').update(p).eq('id', p.id);
+          if(error) return {status:'error', message:error.message};
+          return {status:'ok', message:'Promo diperbarui.'};
+        }
+        const newId = 'PROMO-'+shortId();
+        const { error } = await sb.from('promo').insert(Object.assign({}, p, {id:newId, status:p.status||'aktif'}));
+        if(error) return {status:'error', message:error.message};
+        return {status:'ok', message:'Promo ditambahkan.'};
       }
 
       case 'dashboard': {
@@ -729,12 +803,14 @@ async function api(action, payload){
         }
 
         const { data: produkRows } = await sb.from('produk').select('*');
+        const { data: promoRows } = await sb.from('promo').select('*');
         let subtotalPesanan = 0;
         const itemResults = [];
         for(const it of items){
           const produk = (produkRows||[]).find(p=>p.id===it.productId);
           if(!produk) return {status:'error', message:'Produk tidak ditemukan: '+it.productId};
-          const hasil = hitungItemClient(it.tipeInput, Number(produk.harga_jual), it.inputValue, produk.harga_reseller, isReseller, produk.pakai_promo);
+          const promo = produk.promo_id ? (promoRows||[]).find(pr=>pr.id===produk.promo_id) : null;
+          const hasil = hitungItemClient(it.tipeInput, Number(produk.harga_jual), it.inputValue, produk.harga_reseller, isReseller, promo);
           subtotalPesanan += hasil.subtotal;
           itemResults.push({ product_id:produk.id, nama_produk:produk.nama_produk, tipe_input:it.tipeInput, input_value:it.inputValue, harga_satuan:produk.harga_jual, qty:hasil.qty, harga_normal:hasil.hargaNormal, diskon_item:hasil.diskon, subtotal:hasil.subtotal, keterangan:it.keterangan||'' });
         }
@@ -1045,6 +1121,7 @@ function switchSubMaster(name){
   document.querySelectorAll('.submaster-btn').forEach(b=>b.classList.toggle('active', b.dataset.submaster===name));
   if(name==='produk') loadProduk();
   if(name==='pelanggan') loadPelanggan();
+  if(name==='promo') loadPromo();
 }
 document.querySelectorAll('.submaster-btn').forEach(b=>b.addEventListener('click', ()=>switchSubMaster(b.dataset.submaster)));
 document.querySelectorAll('#tabs button').forEach(b=>b.addEventListener('click', ()=>{
@@ -1112,7 +1189,11 @@ cobaSesiTersimpan();
 /* ================= MASTER DATA ================= */
 async function loadMasterData(){
   const data = await api('initData', {});
-  if(data.status==='ok'){ produkList = data.produk; pelangganList = data.pelanggan; }
+  if(data.status==='ok'){ produkList = data.produk; pelangganList = data.pelanggan; promoList = data.promo||[]; }
+}
+function cariPromo(promoId){
+  if(!promoId) return null;
+  return promoList.find(p=>p.id===promoId) || null;
 }
 
 /* ================= DASHBOARD ================= */
@@ -1337,14 +1418,14 @@ function updateItemSubline(it){
   const produk = produkList.find(p=>p.id===it.productId);
   if(!produk){ el.innerHTML=''; return; }
   const isReseller = document.getElementById('ordIsReseller').checked;
-  const hasil = hitungItemClient(it.tipeInput, Number(produk.harga_jual), it.inputValue, produk.harga_reseller, isReseller, produk.pakai_promo);
+  const hasil = hitungItemClient(it.tipeInput, Number(produk.harga_jual), it.inputValue, produk.harga_reseller, isReseller, cariPromo(produk.promo_id));
   el.innerHTML = `<span>${hasil.qty} pcs${hasil.diskon>0?' · hemat '+rupiah(hasil.diskon):''}</span><b>${rupiah(hasil.subtotal)}</b>`;
 }
 function getOrderItemResults(){
   const isReseller = document.getElementById('ordIsReseller').checked;
   return orderItems.filter(it=>it.productId).map(it=>{
     const produk = produkList.find(p=>p.id===it.productId);
-    const hasil = hitungItemClient(it.tipeInput, Number(produk.harga_jual), it.inputValue, produk.harga_reseller, isReseller, produk.pakai_promo);
+    const hasil = hitungItemClient(it.tipeInput, Number(produk.harga_jual), it.inputValue, produk.harga_reseller, isReseller, cariPromo(produk.promo_id));
     return Object.assign({produk}, it, hasil);
   });
 }
@@ -1495,7 +1576,7 @@ function renderDetail(){
       </div>
       ${order.catatan ? `<p style="font-size:13px;color:var(--ink-soft);margin-top:10px;"><b>Catatan:</b> ${order.catatan}</p>` : ''}
       ${isSelesai ? `<p style="font-size:12.5px;color:var(--ink-soft);margin-top:10px;">🔒 Pesanan sudah Selesai.</p>` : ''}
-      ${isDibatalkan ? `<p style="font-size:12.5px;color:var(--ink-soft);margin-top:10px;">🔒 Pesanan dibatalkan — cuma status yang bisa diubah (misal kalau salah batalkan).</p>` : ''}
+      ${isDibatalkan ? `<p style="font-size:12.5px;color:var(--ink-soft);margin-top:10px;">🔒 Pesanan dibatalkan</p>` : ''}
 
       <div class="quickbtns">
         ${isAktif ? `<button class="btn btn-primary" onclick="selesaikanDanLunas()">✅ Selesai &amp; Lunas</button>` : ''}
@@ -1630,15 +1711,19 @@ async function loadProduk(){
   produkList = res.produk || produkList;
   const produkTerurut = [...res.produk].sort((a,b)=>(a.urutan||0)-(b.urutan||0));
   const table = document.getElementById('produkTable');
-  table.innerHTML = `<thead><tr><th>SKU</th><th>Nama</th><th>Tipe</th><th>Isi</th><th>Harga Jual</th><th>Harga Reseller</th><th>Status</th><th></th></tr></thead>
-  <tbody>${produkTerurut.map(p=>`<tr>
+  table.innerHTML = `<thead><tr><th>SKU</th><th>Nama</th><th>Tipe</th><th>Isi</th><th>Harga Jual</th><th>Harga Reseller</th><th>Promo</th><th>Status</th><th></th></tr></thead>
+  <tbody>${produkTerurut.map(p=>{
+    const promo = cariPromo(p.promo_id);
+    return `<tr>
     <td class="mono">${p.id}</td>
     <td>${p.nama_produk}<br><span style="color:var(--ink-soft);font-size:12px;">${p.deskripsi||''}</span></td>
     <td>${p.tipe}</td><td>${p.isi_pcs}</td><td class="mono">${rupiah(p.harga_jual)}</td>
     <td class="mono">${p.harga_reseller ? rupiah(p.harga_reseller) : '-'}</td>
+    <td>${promo ? promo.nama : '<span style="color:var(--ink-soft);">-</span>'}</td>
     <td><span class="badge ${p.status==='aktif'?'pay-Lunas':'pay-Belum_Dibayar'}">${p.status}</span></td>
     <td><button class="btn btn-outline" onclick='editProduk(${JSON.stringify(p).replace(/'/g,"&apos;")})'>Edit</button></td>
-  </tr>`).join('')}</tbody>`;
+  </tr>`;
+  }).join('')}</tbody>`;
 }
 document.getElementById('addProdukBtn').addEventListener('click', ()=>openProdukModal());
 function editProduk(p){ openProdukModal(p); }
@@ -1655,7 +1740,10 @@ function openProdukModal(p){
   document.getElementById('modalProdukHargaBeli').value = p ? p.harga_beli : 0;
   document.getElementById('modalProdukHargaJual').value = p ? p.harga_jual : '';
   document.getElementById('modalProdukHargaReseller').value = p ? (p.harga_reseller||'') : '';
-  document.getElementById('modalProdukPakaiPromo').checked = p ? (p.pakai_promo!==false) : true;
+  const selPromo = document.getElementById('modalProdukPromo');
+  selPromo.innerHTML = '<option value="">Tidak ada promo (harga flat)</option>' +
+    promoList.filter(pr=>pr.status==='aktif').map(pr=>`<option value="${pr.id}">${pr.nama}</option>`).join('');
+  selPromo.value = p ? (p.promo_id||'') : '';
   document.getElementById('modalProdukUrutan').value = p ? (p.urutan||0) : (produkList.length ? Math.max(...produkList.map(x=>x.urutan||0))+1 : 1);
   document.getElementById('modalProdukStatus').value = p ? p.status : 'aktif';
   document.getElementById('modalProduk').classList.add('show');
@@ -1673,7 +1761,7 @@ document.getElementById('modalProdukSave').addEventListener('click', async ()=>{
     harga_beli: Number(document.getElementById('modalProdukHargaBeli').value)||0,
     harga_jual: Number(document.getElementById('modalProdukHargaJual').value)||0,
     harga_reseller: Number(document.getElementById('modalProdukHargaReseller').value)||0,
-    pakai_promo: document.getElementById('modalProdukPakaiPromo').checked,
+    promo_id: document.getElementById('modalProdukPromo').value || null,
     status: document.getElementById('modalProdukStatus').value,
     urutan: Number(document.getElementById('modalProdukUrutan').value)||0
   };
@@ -1682,6 +1770,66 @@ document.getElementById('modalProdukSave').addEventListener('click', async ()=>{
   document.getElementById('modalProduk').classList.remove('show');
   await loadMasterData();
   loadProduk();
+});
+
+/* ================= PROMO ================= */
+async function loadPromo(){
+  const res = await api('listPromo', {});
+  promoList = res.promo || promoList;
+  const table = document.getElementById('promoTable');
+  if(!res.promo || res.promo.length===0){ table.innerHTML='<tbody><tr><td class="empty-msg">Belum ada promo.</td></tr></tbody>'; return; }
+  table.innerHTML = `<thead><tr><th>Nama Promo</th><th>Tipe</th><th>Aturan</th><th>Status</th><th></th></tr></thead>
+  <tbody>${res.promo.map(p=>{
+    const aturan = p.tipe==='bundling'
+      ? `${p.bundle_qty} pcs = ${rupiah(p.bundle_harga)}`
+      : `Diskon ${rupiah(p.diskon_per_pcs)}/pcs`;
+    return `<tr>
+      <td>${p.nama}</td>
+      <td>${p.tipe==='bundling'?'Bundling':'Diskon Flat'}</td>
+      <td class="mono">${aturan}</td>
+      <td><span class="badge ${p.status==='aktif'?'pay-Lunas':'pay-Belum_Dibayar'}">${p.status}</span></td>
+      <td><button class="btn btn-outline" onclick='editPromo(${JSON.stringify(p).replace(/'/g,"&apos;")})'>Edit</button></td>
+    </tr>`;
+  }).join('')}</tbody>`;
+}
+document.getElementById('addPromoBtn').addEventListener('click', ()=>openPromoModal());
+function editPromo(p){ openPromoModal(p); }
+function openPromoModal(p){
+  document.getElementById('modalPromoTitle').textContent = p ? 'Edit Promo' : 'Tambah Promo';
+  document.getElementById('modalPromoId').value = p ? p.id : '';
+  document.getElementById('modalPromoNama').value = p ? p.nama : '';
+  document.getElementById('modalPromoTipe').value = p ? p.tipe : 'bundling';
+  document.getElementById('modalPromoBundleQty').value = p ? (p.bundle_qty||3) : 3;
+  document.getElementById('modalPromoBundleHarga').value = p ? (p.bundle_harga||5000) : 5000;
+  document.getElementById('modalPromoDiskonPcs').value = p ? (p.diskon_per_pcs||100) : 100;
+  document.getElementById('modalPromoStatus').value = p ? p.status : 'aktif';
+  toggleFieldPromo();
+  document.getElementById('modalPromo').classList.add('show');
+}
+function toggleFieldPromo(){
+  const tipe = document.getElementById('modalPromoTipe').value;
+  document.getElementById('promoFieldBundling').style.display = tipe==='bundling' ? 'block' : 'none';
+  document.getElementById('promoFieldDiskon').style.display = tipe==='diskon_flat' ? 'block' : 'none';
+}
+document.getElementById('modalPromoTipe').addEventListener('change', toggleFieldPromo);
+document.getElementById('modalPromoCancel').addEventListener('click', ()=>document.getElementById('modalPromo').classList.remove('show'));
+document.getElementById('modalPromoSave').addEventListener('click', async ()=>{
+  const id = document.getElementById('modalPromoId').value;
+  const tipe = document.getElementById('modalPromoTipe').value;
+  const promo = {
+    id: id || undefined,
+    nama: document.getElementById('modalPromoNama').value.trim(),
+    tipe: tipe,
+    bundle_qty: tipe==='bundling' ? (Number(document.getElementById('modalPromoBundleQty').value)||1) : null,
+    bundle_harga: tipe==='bundling' ? (Number(document.getElementById('modalPromoBundleHarga').value)||0) : null,
+    diskon_per_pcs: tipe==='diskon_flat' ? (Number(document.getElementById('modalPromoDiskonPcs').value)||0) : null,
+    status: document.getElementById('modalPromoStatus').value
+  };
+  const res = await api('savePromo', {promo});
+  if(res.status!=='ok'){ alert(res.message); return; }
+  document.getElementById('modalPromo').classList.remove('show');
+  await loadMasterData();
+  loadPromo();
 });
 
 /* ================= PELANGGAN ================= */
