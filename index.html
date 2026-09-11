@@ -809,10 +809,11 @@ async function api(action, payload){
         for(const it of items){
           const produk = (produkRows||[]).find(p=>p.id===it.productId);
           if(!produk) return {status:'error', message:'Produk tidak ditemukan: '+it.productId};
-          const promo = produk.promo_id ? (promoRows||[]).find(pr=>pr.id===produk.promo_id) : null;
+          const promoIdDipakai = (it.promoId!==undefined) ? it.promoId : produk.promo_id;
+          const promo = promoIdDipakai ? (promoRows||[]).find(pr=>pr.id===promoIdDipakai) : null;
           const hasil = hitungItemClient(it.tipeInput, Number(produk.harga_jual), it.inputValue, produk.harga_reseller, isReseller, promo);
           subtotalPesanan += hasil.subtotal;
-          itemResults.push({ product_id:produk.id, nama_produk:produk.nama_produk, tipe_input:it.tipeInput, input_value:it.inputValue, harga_satuan:produk.harga_jual, qty:hasil.qty, harga_normal:hasil.hargaNormal, diskon_item:hasil.diskon, subtotal:hasil.subtotal, keterangan:it.keterangan||'' });
+          itemResults.push({ product_id:produk.id, nama_produk:produk.nama_produk, tipe_input:it.tipeInput, input_value:it.inputValue, harga_satuan:produk.harga_jual, qty:hasil.qty, harga_normal:hasil.hargaNormal, diskon_item:hasil.diskon, subtotal:hasil.subtotal, keterangan:it.keterangan||'', promo_id: promo ? promo.id : null });
         }
 
         const diskonManual = Number(payload.diskon)||0;
@@ -1300,7 +1301,7 @@ function initOrderForm(){
     document.getElementById('ordIsReseller').checked = !!order.is_reseller;
     items.forEach(it=>{
       const rowId = 'row'+(itemRowSeq++);
-      orderItems.push({rowId, productId:it.product_id, tipeInput:it.tipe_input, inputValue:it.input_value, keterangan:it.keterangan||''});
+      orderItems.push({rowId, productId:it.product_id, tipeInput:it.tipe_input, inputValue:it.input_value, keterangan:it.keterangan||'', promoId:it.promo_id||null});
     });
     document.getElementById('ordSubmitBtn').textContent = 'Simpan Perubahan';
   } else {
@@ -1359,7 +1360,7 @@ document.getElementById('pickContactBtn').addEventListener('click', async ()=>{
 let itemRowSeq = 0;
 function addItemRow(){
   const rowId = 'row'+(itemRowSeq++);
-  orderItems.push({rowId, productId:'', tipeInput:'pcs', inputValue:1, keterangan:''});
+  orderItems.push({rowId, productId:'', tipeInput:'pcs', inputValue:1, keterangan:'', promoId:null});
   renderItemRows();
 }
 function renderItemRows(){
@@ -1383,11 +1384,16 @@ function renderItemRows(){
         <div class="field" style="max-width:130px;"><label>${!isPaket && it.tipeInput==='rp' ? 'Jumlah (Rp)' : (isPaket?'Jumlah Paket':'Jumlah (pcs)')}</label>
           <input type="number" min="0" value="${it.inputValue}" oninput="setItemField('${it.rowId}','inputValue',this.value)">
         </div>
-        <button type="button" class="remove-btn" onclick="removeItemRow('${it.rowId}')">Hapus</button>
+        ${!isPaket ? `<div class="field" style="max-width:170px;"><label>Promo</label>
+          <select onchange="setItemField('${it.rowId}','promoId',this.value)">
+            <option value="">Tidak ada promo</option>
+            ${promoList.filter(pr=>pr.status==='aktif').map(pr=>`<option value="${pr.id}" ${pr.id===it.promoId?'selected':''}>${pr.nama}</option>`).join('')}
+          </select></div>` : ''}
       </div>
       <div class="field" style="margin-top:8px;"><label>Keterangan (mis. mix varian)</label>
         <input type="text" value="${it.keterangan}" oninput="setItemField('${it.rowId}','keterangan',this.value)" placeholder="Contoh: 3 coklat, 3 stroberi">
       </div>
+      <button type="button" class="remove-btn" style="margin-top:8px;" onclick="removeItemRow('${it.rowId}')">Hapus</button>
       <div class="subline" id="sub-${it.rowId}"></div>
     </div>`;
   }).join('');
@@ -1400,8 +1406,11 @@ function setItemField(rowId, field, value){
   it[field]=value;
   if(field==='productId'){
     const produk = produkList.find(p=>p.id===value);
-    if(produk && produk.tipe==='paket'){ it.tipeInput='paket'; it.inputValue=1; }
-    else if(it.tipeInput==='paket'){ it.tipeInput='pcs'; }
+    if(produk && produk.tipe==='paket'){ it.tipeInput='paket'; it.inputValue=1; it.promoId=null; }
+    else {
+      if(it.tipeInput==='paket') it.tipeInput='pcs';
+      it.promoId = produk ? (produk.promo_id||null) : null; // default: ikut promo yang melekat di produk
+    }
     renderItemRows();
     return;
   }
@@ -1418,14 +1427,14 @@ function updateItemSubline(it){
   const produk = produkList.find(p=>p.id===it.productId);
   if(!produk){ el.innerHTML=''; return; }
   const isReseller = document.getElementById('ordIsReseller').checked;
-  const hasil = hitungItemClient(it.tipeInput, Number(produk.harga_jual), it.inputValue, produk.harga_reseller, isReseller, cariPromo(produk.promo_id));
+  const hasil = hitungItemClient(it.tipeInput, Number(produk.harga_jual), it.inputValue, produk.harga_reseller, isReseller, cariPromo(it.promoId));
   el.innerHTML = `<span>${hasil.qty} pcs${hasil.diskon>0?' · hemat '+rupiah(hasil.diskon):''}</span><b>${rupiah(hasil.subtotal)}</b>`;
 }
 function getOrderItemResults(){
   const isReseller = document.getElementById('ordIsReseller').checked;
   return orderItems.filter(it=>it.productId).map(it=>{
     const produk = produkList.find(p=>p.id===it.productId);
-    const hasil = hitungItemClient(it.tipeInput, Number(produk.harga_jual), it.inputValue, produk.harga_reseller, isReseller, cariPromo(produk.promo_id));
+    const hasil = hitungItemClient(it.tipeInput, Number(produk.harga_jual), it.inputValue, produk.harga_reseller, isReseller, cariPromo(it.promoId));
     return Object.assign({produk}, it, hasil);
   });
 }
@@ -1459,7 +1468,7 @@ document.getElementById('ordSubmitBtn').addEventListener('click', async ()=>{
   try{
     const payload = {
       customer:{ nama, whatsapp:normalizeWa(waRaw), alamat:document.getElementById('ordAlamat').value.trim(), catatan:'' },
-      items: results.map(r=>({ productId:r.productId, tipeInput:r.tipeInput, inputValue:r.inputValue, keterangan:r.keterangan })),
+      items: results.map(r=>({ productId:r.productId, tipeInput:r.tipeInput, inputValue:r.inputValue, keterangan:r.keterangan, promoId:r.promoId||null })),
       diskon:Number(document.getElementById('ordDiskon').value)||0,
       biayaKirim:Number(document.getElementById('ordOngkir').value)||0,
       catatan:document.getElementById('ordCatatan').value.trim(),
