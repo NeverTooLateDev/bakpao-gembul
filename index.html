@@ -257,7 +257,7 @@ tr.clickable:hover{background:var(--green-light);}
         <div class="tablewrap"><table id="ordSummaryTable"><thead><tr><th>Produk</th><th>Qty</th><th>Subtotal</th></tr></thead><tbody></tbody></table></div>
         <div class="totals">
           <div class="row"><span>Total Pesanan</span><span class="mono" id="ordSubtotal">Rp 0</span></div>
-          <div class="field" style="margin-top:8px;"><label>Diskon Tambahan (Rp)</label><input type="number" id="ordDiskon" value="0" min="0"></div>
+          <div class="field" style="margin-top:8px;"><label>Diskon (Rp)</label><input type="number" id="ordDiskon" value="0" min="0"></div>
           <div class="field"><label>Biaya Pengiriman (Rp)</label><input type="number" id="ordOngkir" value="0" min="0"></div>
           <div class="row final"><span>Total Akhir</span><span class="mono" id="ordTotal">Rp 0</span></div>
         </div>
@@ -812,7 +812,7 @@ async function api(action, payload){
           const promoIdDipakai = (it.promoId!==undefined) ? it.promoId : produk.promo_id;
           const promo = promoIdDipakai ? (promoRows||[]).find(pr=>pr.id===promoIdDipakai) : null;
           const hasil = hitungItemClient(it.tipeInput, Number(produk.harga_jual), it.inputValue, produk.harga_reseller, isReseller, promo);
-          subtotalPesanan += hasil.subtotal;
+          subtotalPesanan += hasil.hargaNormal;
           itemResults.push({ product_id:produk.id, nama_produk:produk.nama_produk, tipe_input:it.tipeInput, input_value:it.inputValue, harga_satuan:produk.harga_jual, qty:hasil.qty, harga_normal:hasil.hargaNormal, diskon_item:hasil.diskon, subtotal:hasil.subtotal, keterangan:it.keterangan||'', promo_id: promo ? promo.id : null });
         }
 
@@ -1398,6 +1398,7 @@ function renderItemRows(){
     </div>`;
   }).join('');
   orderItems.forEach(updateItemSubline);
+  isiOtomatisDiskonPromo();
   renderOrderSummary();
 }
 function setItemField(rowId, field, value){
@@ -1441,17 +1442,22 @@ function getOrderItemResults(){
 function renderOrderSummary(){
   const results = getOrderItemResults();
   const tbody = document.querySelector('#ordSummaryTable tbody');
-  tbody.innerHTML = results.length ? results.map(r=>`<tr><td>${r.produk.nama_produk}</td><td>${r.qty}</td><td class="mono">${rupiah(r.subtotal)}</td></tr>`).join('')
+  tbody.innerHTML = results.length ? results.map(r=>`<tr><td>${r.produk.nama_produk}</td><td>${r.qty}</td><td class="mono">${rupiah(r.hargaNormal)}</td></tr>`).join('')
     : '<tr><td colspan="3" class="empty-msg">Belum ada produk dipilih.</td></tr>';
-  const subtotal = results.reduce((s,r)=>s+r.subtotal,0);
+  const subtotal = results.reduce((s,r)=>s+r.hargaNormal,0);
   const diskon = Number(document.getElementById('ordDiskon').value)||0;
   const ongkir = Number(document.getElementById('ordOngkir').value)||0;
   const total = subtotal - diskon + ongkir;
   document.getElementById('ordSubtotal').textContent = rupiah(subtotal);
   document.getElementById('ordTotal').textContent = rupiah(total);
 }
+function isiOtomatisDiskonPromo(){
+  const results = getOrderItemResults();
+  const autoDiskon = results.reduce((s,r)=>s+(r.diskon||0),0);
+  document.getElementById('ordDiskon').value = autoDiskon;
+}
 document.getElementById('addItemBtn').addEventListener('click', addItemRow);
-document.getElementById('ordIsReseller').addEventListener('change', renderItemRows);
+document.getElementById('ordIsReseller').addEventListener('change', ()=>{ renderItemRows(); isiOtomatisDiskonPromo(); renderOrderSummary(); });
 document.getElementById('ordDiskon').addEventListener('input', renderOrderSummary);
 document.getElementById('ordOngkir').addEventListener('input', renderOrderSummary);
 
