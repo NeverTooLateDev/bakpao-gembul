@@ -884,7 +884,7 @@ async function api(action, payload){
           rows = rows.filter(o=>String(o.nama_pelanggan).toLowerCase().indexOf(s)>-1 || String(o.nomor_pesanan).toLowerCase().indexOf(s)>-1);
         }
         if(payload.statusPesanan) rows = rows.filter(o=>o.status_pesanan===payload.statusPesanan);
-        if(payload.statusPembayaran) rows = rows.filter(o=>o.status_pembayaran===payload.statusPembayaran);
+        if(payload.statusPembayaran) rows = rows.filter(o=>o.status_pembayaran===payload.statusPembayaran && !(o.status_pesanan==='Dibatalkan' && o.status_pembayaran!=='Lunas'));
         if(payload.tanggalMulai) rows = rows.filter(o=>tglEfektif(o) >= payload.tanggalMulai);
         if(payload.tanggalSelesai) rows = rows.filter(o=>tglEfektif(o) <= payload.tanggalSelesai);
         rows.sort((a,b)=>String(b.nomor_pesanan).localeCompare(String(a.nomor_pesanan)));
@@ -1001,7 +1001,7 @@ async function api(action, payload){
         const totalPesanan = orders.length;
         const totalOmzet = orders.reduce((s,o)=>s+Number(o.total||0),0);
         const totalPembayaranDiterima = orders.reduce((s,o)=>s+Number(o.jumlah_dibayar||0),0);
-        const totalPiutang = orders.reduce((s,o)=>s+Number(o.sisa_tagihan||0),0);
+        const totalPiutang = orders.filter(o=>o.status_pesanan!=='Dibatalkan').reduce((s,o)=>s+Number(o.sisa_tagihan||0),0);
 
         const perProduk = {};
         items.forEach(it=>{
@@ -1103,8 +1103,18 @@ function applyRolePermissions(){
 }
 
 /* ================= NAV ================= */
+let orderFormOrigin = 'dashboard';
+function activeViewName(){
+  const el = document.querySelector('.view.active');
+  return el ? el.id.replace(/^view-/,'') : 'dashboard';
+}
 function switchView(name){
   if((name==='masterdata' || name==='laporan' || name==='labarugi') && !isAdmin()){ name='dashboard'; }
+  if(name==='pesananBaru' && !editingOrderId){
+    const prev = activeViewName();
+    if(prev==='detail') orderFormOrigin = detailSourceView || 'riwayat';
+    else if(prev!=='pesananBaru' && prev!=='login') orderFormOrigin = prev;
+  }
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.view===name));
@@ -1235,7 +1245,7 @@ function renderDashTable(orders, tanggalLabel){
       <td>${o.nama_pelanggan}</td>
       <td class="mono">${rupiah(o.total)}</td>
       <td><span class="badge st-${badgeClass(o.status_pesanan)}">${o.status_pesanan}</span></td>
-      <td><span class="badge pay-${badgeClass(o.status_pembayaran)}">${o.status_pembayaran}</span></td>
+      <td>${o.status_pesanan==='Dibatalkan' ? '<span style="color:var(--ink-soft);">—</span>' : `<span class="badge pay-${badgeClass(o.status_pembayaran)}">${o.status_pembayaran}</span>`}</td>
     </tr>`).join('');
   document.getElementById('dashRecentTable').innerHTML = orders.length
     ? `<thead><tr><th>No.</th><th>Tgl Pesan</th><th>Pelanggan</th><th>Total</th><th>Status</th><th>Bayar</th></tr></thead><tbody>${tbody}</tbody>`
@@ -1272,7 +1282,8 @@ async function kembaliSetelahDetail(){
       await selectDashboardDate(dashboardSelectedDateKey, dashboardSelectedLabel);
     }
   } else {
-    switchView('riwayat');
+    const tujuan = (detailSourceView && detailSourceView!=='detail' && detailSourceView!=='pesananBaru' && document.getElementById('view-'+detailSourceView)) ? detailSourceView : 'riwayat';
+    switchView(tujuan);
   }
 }
 
@@ -1324,7 +1335,9 @@ function initOrderForm(){
   document.getElementById('ordStatusBox').className='status-box';
 }
 document.getElementById('cancelEditBtn').addEventListener('click', ()=>{
+  const backId = editingOrderId;
   editingOrderId = null; editingOrderData = null;
+  if(backId){ openDetail(backId, detailSourceView); return; }
   initOrderForm();
 });
 document.getElementById('ordWa').addEventListener('change', function(){
@@ -1490,7 +1503,7 @@ document.getElementById('ordSubmitBtn').addEventListener('click', async ()=>{
       await loadMasterData();
       const gotoId = isEdit ? editingOrderId : res.order.id;
       editingOrderId = null; editingOrderData = null;
-      setTimeout(()=>openDetail(gotoId), 600);
+      setTimeout(()=>openDetail(gotoId, isEdit ? detailSourceView : orderFormOrigin), 600);
     } else {
       box.textContent = res.message; box.className='status-box show err';
     }
@@ -1519,7 +1532,7 @@ async function loadRiwayat(){
   }
   const totalSemua = res.orders.reduce((s,o)=>s+Number(o.total||0),0);
   const totalDibayar = res.orders.reduce((s,o)=>s+Number(o.jumlah_dibayar||0),0);
-  const totalSisa = res.orders.reduce((s,o)=>s+Number(o.sisa_tagihan||0),0);
+  const totalSisa = res.orders.filter(o=>o.status_pesanan!=='Dibatalkan').reduce((s,o)=>s+Number(o.sisa_tagihan||0),0);
   summary.style.display='block';
   summary.innerHTML = `<div class="totals" style="border-top:none;padding-top:0;margin-top:0;">
     <div class="row"><span>${res.orders.length} pesanan ditemukan</span><span></span></div>
@@ -1534,7 +1547,7 @@ async function loadRiwayat(){
     <td>${o.nama_pelanggan}</td>
     <td class="mono">${rupiah(o.total)}</td>
     <td><span class="badge st-${badgeClass(o.status_pesanan)}">${o.status_pesanan}</span></td>
-    <td><span class="badge pay-${badgeClass(o.status_pembayaran)}">${o.status_pembayaran}</span></td>
+    <td>${o.status_pesanan==='Dibatalkan' ? '<span style="color:var(--ink-soft);">—</span>' : `<span class="badge pay-${badgeClass(o.status_pembayaran)}">${o.status_pembayaran}</span>`}</td>
   </tr>`).join('')}</tbody>`;
 }
 document.getElementById('filApplyBtn').addEventListener('click', loadRiwayat);
@@ -1542,7 +1555,8 @@ document.getElementById('filApplyBtn').addEventListener('click', loadRiwayat);
 /* ================= DETAIL PESANAN ================= */
 async function openDetail(orderId, source){
   detailSourceView = source || 'riwayat';
-  document.getElementById('detailBackBtn').textContent = detailSourceView==='dashboard' ? '← Kembali ke Dashboard' : '← Kembali ke Riwayat Pesanan';
+  const _lblKembali = {dashboard:'Dashboard', riwayat:'Riwayat Pesanan', laporan:'Laporan', masterdata:'Master Data', labarugi:'Laba Rugi'};
+  document.getElementById('detailBackBtn').textContent = '← Kembali ke ' + (_lblKembali[detailSourceView] || _lblKembali.riwayat);
   switchViewRaw('detail');
   document.getElementById('detailContent').innerHTML = '<p class="empty-msg">Memuat...</p>';
   const res = await api('getOrderDetail', {orderId});
@@ -1572,7 +1586,7 @@ function renderDetail(){
         <div style="text-align:right;">
           ${order.is_reseller ? `<span class="badge" style="background:#3E2723;color:#FFD180;">🏷️ Reseller</span>` : ''}
           <span class="badge st-${badgeClass(order.status_pesanan)}">${order.status_pesanan}</span>
-          <span class="badge pay-${badgeClass(order.status_pembayaran)}">${order.status_pembayaran}</span>
+          ${isDibatalkan ? '' : `<span class="badge pay-${badgeClass(order.status_pembayaran)}">${order.status_pembayaran}</span>`}
         </div>
       </div>
       <h3 style="font-size:14px;margin:16px 0 6px;">Pelanggan</h3>
@@ -1588,7 +1602,7 @@ function renderDetail(){
         <div class="row"><span>Biaya Pengiriman</span><span class="mono">${rupiah(order.biaya_kirim)}</span></div>
         <div class="row final"><span>Total Akhir</span><span class="mono">${rupiah(order.total)}</span></div>
         <div class="row" style="margin-top:8px;"><span>Sudah Dibayar</span><span class="mono">${rupiah(order.jumlah_dibayar)}</span></div>
-        <div class="row"><span>Sisa Tagihan</span><span class="mono">${rupiah(order.sisa_tagihan)}</span></div>
+        <div class="row"><span>Sisa Tagihan</span><span class="mono">${rupiah(isDibatalkan ? 0 : order.sisa_tagihan)}</span></div>
       </div>
       ${order.catatan ? `<p style="font-size:13px;color:var(--ink-soft);margin-top:10px;"><b>Catatan:</b> ${order.catatan}</p>` : ''}
       ${isSelesai ? `<p style="font-size:12.5px;color:var(--ink-soft);margin-top:10px;">🔒 Pesanan sudah Selesai.</p>` : ''}
