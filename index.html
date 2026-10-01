@@ -993,6 +993,7 @@ async function api(action, payload){
         let orders = allOrders||[];
         if(payload.tanggalMulai) orders = orders.filter(o=>tglEfektif(o) >= payload.tanggalMulai);
         if(payload.tanggalSelesai) orders = orders.filter(o=>tglEfektif(o) <= payload.tanggalSelesai);
+        orders = orders.filter(o=>o.status_pesanan!=='Dibatalkan');
         const orderIds = orders.map(o=>o.id);
         const { data: allItems } = orderIds.length ? await sb.from('pesanan_item').select('*').in('order_id', orderIds) : {data:[]};
         const items = allItems||[];
@@ -1067,6 +1068,7 @@ async function api(action, payload){
         let orders = allOrders||[];
         if(payload.tanggalMulai) orders = orders.filter(o=>tglEfektif(o) >= payload.tanggalMulai);
         if(payload.tanggalSelesai) orders = orders.filter(o=>tglEfektif(o) <= payload.tanggalSelesai);
+        orders = orders.filter(o=>o.status_pesanan!=='Dibatalkan');
         const totalOmzet = orders.reduce((s,o)=>s+Number(o.total||0),0);
 
         const { data: allExpenses } = await sb.from('pengeluaran').select('*');
@@ -1530,12 +1532,14 @@ async function loadRiwayat(){
     summary.style.display='none';
     return;
   }
-  const totalSemua = res.orders.reduce((s,o)=>s+Number(o.total||0),0);
-  const totalDibayar = res.orders.reduce((s,o)=>s+Number(o.jumlah_dibayar||0),0);
-  const totalSisa = res.orders.filter(o=>o.status_pesanan!=='Dibatalkan').reduce((s,o)=>s+Number(o.sisa_tagihan||0),0);
+  const ordersAktif = res.orders.filter(o=>o.status_pesanan!=='Dibatalkan');
+  const jumlahBatal = res.orders.length - ordersAktif.length;
+  const totalSemua = ordersAktif.reduce((s,o)=>s+Number(o.total||0),0);
+  const totalDibayar = ordersAktif.reduce((s,o)=>s+Number(o.jumlah_dibayar||0),0);
+  const totalSisa = ordersAktif.reduce((s,o)=>s+Number(o.sisa_tagihan||0),0);
   summary.style.display='block';
   summary.innerHTML = `<div class="totals" style="border-top:none;padding-top:0;margin-top:0;">
-    <div class="row"><span>${res.orders.length} pesanan ditemukan</span><span></span></div>
+    <div class="row"><span>${res.orders.length} pesanan ditemukan${jumlahBatal ? ' ('+jumlahBatal+' dibatalkan, tidak dihitung)' : ''}</span><span></span></div>
     <div class="row final"><span>Total Keseluruhan</span><span class="mono">${rupiah(totalSemua)}</span></div>
     <div class="row"><span>Sudah Dibayar</span><span class="mono">${rupiah(totalDibayar)}</span></div>
     <div class="row"><span>Sisa Tagihan</span><span class="mono">${rupiah(totalSisa)}</span></div>
