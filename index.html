@@ -362,6 +362,7 @@ tr.clickable:hover{background:var(--green-light);}
         <div class="row"><span>Pendapatan (Omzet)</span><span class="mono">Rp <span id="lrOmzet">0</span></span></div>
         <div class="row" style="margin-top:8px;"><span>Beban Operasional</span><span class="mono">- Rp <span id="lrBeban">0</span></span></div>
         <div class="row final" style="font-size:22px;"><span>Laba Bersih</span><span class="mono" id="lrLabaBersih">Rp 0</span></div>
+        <div class="row" style="margin-top:2px;"><span style="color:var(--ink-soft);font-size:13px;">Margin Laba Bersih</span><span class="mono" id="lrMargin" style="font-size:14px;font-weight:600;">0%</span></div>
       </div>
     </div>
 
@@ -1991,6 +1992,15 @@ async function loadLabaRugi(){
   const labaBersihEl = document.getElementById('lrLabaBersih');
   labaBersihEl.textContent = rupiah(res.labaBersih);
   labaBersihEl.style.color = res.labaBersih>=0 ? 'var(--green-dark)' : 'var(--red)';
+  const marginEl = document.getElementById('lrMargin');
+  if(res.totalOmzet > 0){
+    const margin = (res.labaBersih / res.totalOmzet) * 100;
+    marginEl.textContent = margin.toLocaleString('id-ID',{minimumFractionDigits:1, maximumFractionDigits:1}) + '%';
+    marginEl.style.color = margin>=0 ? 'var(--green-dark)' : 'var(--red)';
+  } else {
+    marginEl.textContent = '-';
+    marginEl.style.color = 'var(--ink-soft)';
+  }
 
   document.getElementById('lrKategoriTable').innerHTML = res.bebanPerKategori.length
     ? `<thead><tr><th>Kategori</th><th>Jumlah</th><th>Kontribusi</th></tr></thead><tbody>${res.bebanPerKategori.map(k=>`<tr><td>${k.kategori}</td><td class="mono">${rupiah(k.jumlah)}</td><td class="mono">${res.totalBeban>0?(k.jumlah/res.totalBeban*100).toFixed(1):'0'}%</td></tr>`).join('')}</tbody>`
