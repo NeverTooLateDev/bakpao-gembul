@@ -1106,18 +1106,8 @@ function applyRolePermissions(){
 }
 
 /* ================= NAV ================= */
-let orderFormOrigin = 'dashboard';
-function activeViewName(){
-  const el = document.querySelector('.view.active');
-  return el ? el.id.replace(/^view-/,'') : 'dashboard';
-}
 function switchView(name){
   if((name==='masterdata' || name==='laporan' || name==='labarugi') && !isAdmin()){ name='dashboard'; }
-  if(name==='pesananBaru' && !editingOrderId){
-    const prev = activeViewName();
-    if(prev==='detail') orderFormOrigin = detailSourceView || 'riwayat';
-    else if(prev!=='pesananBaru' && prev!=='login') orderFormOrigin = prev;
-  }
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.view===name));
@@ -1285,7 +1275,7 @@ async function kembaliSetelahDetail(){
       await selectDashboardDate(dashboardSelectedDateKey, dashboardSelectedLabel);
     }
   } else {
-    const tujuan = (detailSourceView && detailSourceView!=='detail' && detailSourceView!=='pesananBaru' && document.getElementById('view-'+detailSourceView)) ? detailSourceView : 'riwayat';
+    const tujuan = (detailSourceView && detailSourceView!=='detail' && document.getElementById('view-'+detailSourceView)) ? detailSourceView : 'riwayat';
     switchView(tujuan);
   }
 }
@@ -1506,7 +1496,7 @@ document.getElementById('ordSubmitBtn').addEventListener('click', async ()=>{
       await loadMasterData();
       const gotoId = isEdit ? editingOrderId : res.order.id;
       editingOrderId = null; editingOrderData = null;
-      setTimeout(()=>openDetail(gotoId, isEdit ? detailSourceView : orderFormOrigin), 600);
+      setTimeout(()=>openDetail(gotoId, isEdit ? detailSourceView : 'pesananBaru'), 600);
     } else {
       box.textContent = res.message; box.className='status-box show err';
     }
@@ -1560,7 +1550,7 @@ document.getElementById('filApplyBtn').addEventListener('click', loadRiwayat);
 /* ================= DETAIL PESANAN ================= */
 async function openDetail(orderId, source){
   detailSourceView = source || 'riwayat';
-  const _lblKembali = {dashboard:'Dashboard', riwayat:'Riwayat Pesanan', laporan:'Laporan', masterdata:'Master Data', labarugi:'Laba Rugi'};
+  const _lblKembali = {pesananBaru:'Input Pesanan', dashboard:'Dashboard', riwayat:'Riwayat Pesanan', laporan:'Laporan', masterdata:'Master Data', labarugi:'Laba Rugi'};
   document.getElementById('detailBackBtn').textContent = '← Kembali ke ' + (_lblKembali[detailSourceView] || _lblKembali.riwayat);
   switchViewRaw('detail');
   document.getElementById('detailContent').innerHTML = '<p class="empty-msg">Memuat...</p>';
