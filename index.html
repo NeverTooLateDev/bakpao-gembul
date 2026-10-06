@@ -1128,11 +1128,19 @@ function switchSubMaster(name){
   if(name==='promo') loadPromo();
 }
 document.querySelectorAll('.submaster-btn').forEach(b=>b.addEventListener('click', ()=>switchSubMaster(b.dataset.submaster)));
+let orderFormOrigin = 'pesananBaru';
 document.querySelectorAll('#tabs button').forEach(b=>b.addEventListener('click', ()=>{
-  if(b.dataset.view==='pesananBaru'){ editingOrderId=null; editingOrderData=null; }
+  if(b.dataset.view==='pesananBaru'){ editingOrderId=null; editingOrderData=null; orderFormOrigin = 'pesananBaru'; }
   switchView(b.dataset.view);
 }));
-document.querySelectorAll('[data-goto]').forEach(b=>b.addEventListener('click', ()=>switchView(b.dataset.goto)));
+document.querySelectorAll('[data-goto]').forEach(b=>b.addEventListener('click', ()=>{
+  if(b.dataset.goto==='pesananBaru'){
+    const aktif = document.querySelector('.view.active');
+    const asal = aktif ? aktif.id.replace(/^view-/,'') : 'dashboard';
+    orderFormOrigin = (asal==='pesananBaru' || asal==='detail' || asal==='login') ? 'pesananBaru' : asal;
+  }
+  switchView(b.dataset.goto);
+}));
 
 /* ================= LOGIN ================= */
 document.getElementById('loginBtn').addEventListener('click', doLogin);
@@ -1496,7 +1504,7 @@ document.getElementById('ordSubmitBtn').addEventListener('click', async ()=>{
       await loadMasterData();
       const gotoId = isEdit ? editingOrderId : res.order.id;
       editingOrderId = null; editingOrderData = null;
-      setTimeout(()=>openDetail(gotoId, isEdit ? detailSourceView : 'pesananBaru'), 600);
+      setTimeout(()=>openDetail(gotoId, isEdit ? detailSourceView : orderFormOrigin), 600);
     } else {
       box.textContent = res.message; box.className='status-box show err';
     }
