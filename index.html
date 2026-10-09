@@ -326,6 +326,7 @@ tr.clickable:hover{background:var(--green-light);}
     </div>
 
     <div class="submaster" id="submaster-pelanggan" style="margin-top:14px;display:none;">
+      <div class="quickbtns" style="margin-top:0;"><button id="addPelangganBtn">+ Tambah Pelanggan</button></div>
       <div class="card"><div class="tablewrap"><table id="pelangganTable"></table></div></div>
     </div>
 
@@ -559,7 +560,7 @@ tr.clickable:hover{background:var(--green-light);}
 <!-- MODAL: Pelanggan -->
 <div class="modal-bg" id="modalPelanggan">
   <div class="modal">
-    <h3>Edit Data Pelanggan</h3>
+    <h3 id="modalPelangganTitle">Edit Data Pelanggan</h3>
     <input type="hidden" id="modalPelangganId">
     <div class="field"><label>Nama</label><input type="text" id="modalPelangganNama"></div>
     <div class="field"><label>Nomor WhatsApp</label><input type="tel" id="modalPelangganWa"></div>
@@ -1027,6 +1028,34 @@ async function api(action, payload){
           c.tanggal_terakhir = ordersCust.length ? ordersCust.map(o=>o.tanggal).sort().slice(-1)[0] : '';
         });
         return {status:'ok', pelanggan:pelanggan||[]};
+      }
+
+      case 'addCustomer': {
+        const c = payload.pelanggan || {};
+        const nama = String(c.nama||'').trim();
+        const wa = normalizeWa(c.whatsapp);
+        if(!nama) return {status:'error', message:'Nama pelanggan wajib diisi.'};
+        if(!wa) return {status:'error', message:'Nomor WhatsApp wajib diisi.'};
+        const { data: rows } = await sb.from('pelanggan').select('*');
+        const dobel = (rows||[]).find(r=>normalizeWa(r.whatsapp)===wa);
+        if(dobel) return {status:'error', message:'Nomor WhatsApp ini sudah terdaftar atas nama '+dobel.nama+'.'};
+        const baru = { id: await nextCustomerId(), nama, whatsapp:wa, alamat:c.alamat||'', catatan:c.catatan||'' };
+        const { error } = await sb.from('pelanggan').insert(baru);
+        if(error) return {status:'error', message:error.message};
+        return {status:'ok', message:'Pelanggan ditambahkan.', pelanggan:baru};
+      }
+
+      case 'deleteCustomer': {
+        if(!payload.id) return {status:'error', message:'ID pelanggan tidak ditemukan.'};
+        const { data: existing } = await sb.from('pelanggan').select('*').eq('id', payload.id).maybeSingle();
+        if(!existing) return {status:'error', message:'Pelanggan tidak ditemukan.'};
+        const { data: ords } = await sb.from('pesanan').select('id,customer_id,whatsapp');
+        const waNorm = normalizeWa(existing.whatsapp);
+        const jumlah = (ords||[]).filter(o=>o.customer_id===payload.id || normalizeWa(o.whatsapp)===waNorm).length;
+        if(jumlah>0) return {status:'error', message:'Pelanggan ini sudah punya '+jumlah+' pesanan sehingga tidak bisa dihapus, supaya riwayat pesanan tetap utuh.'};
+        const { error } = await sb.from('pelanggan').delete().eq('id', payload.id);
+        if(error) return {status:'error', message:error.message};
+        return {status:'ok', message:'Pelanggan dihapus.'};
       }
 
       case 'updateCustomer': {
@@ -2001,20 +2030,25 @@ document.getElementById('modalPromoSave').addEventListener('click', async ()=>{
 /* ================= PELANGGAN ================= */
 async function loadPelanggan(){
   const res = await api('listCustomers', {});
+  window.pelangganCache = res.pelanggan || [];
   const table = document.getElementById('pelangganTable');
   if(!res.pelanggan || res.pelanggan.length===0){ table.innerHTML='<tbody><tr><td class="empty-msg">Belum ada pelanggan.</td></tr></tbody>'; return; }
-  table.innerHTML = `<thead><tr><th>Nama</th><th>WhatsApp</th><th>Total Pesanan</th><th>Total Transaksi</th><th>Terakhir Pesan</th><th></th></tr></thead>
+  table.innerHTML = `<thead><tr><th>Nama</th><th>WhatsApp</th><th>Total Transaksi</th><th>Terakhir Pesan</th><th></th></tr></thead>
   <tbody>${res.pelanggan.map(c=>`<tr>
-    <td>${c.nama}</td><td class="mono">${c.whatsapp}</td><td>${c.total_pesanan}</td>
+    <td>${c.nama}</td><td class="mono">${c.whatsapp}</td>
     <td class="mono">${angka(c.total_transaksi)}</td>
     <td>${c.tanggal_terakhir ? new Date(c.tanggal_terakhir).toLocaleDateString('id-ID',{timeZone:'Asia/Jakarta'}) : '-'}</td>
     <td style="white-space:nowrap;">
       ${isAdmin() ? `<button class="btn btn-outline" onclick='openPelangganModal(${JSON.stringify(c).replace(/'/g,"&apos;")})'>Edit</button>` : ''}
       <button class="btn btn-outline" onclick="searchByCustomer('${c.nama.replace(/'/g,"")}')">Riwayat</button>
+      ${isAdmin() ? `<button class="btn btn-outline" style="color:var(--red);border-color:var(--red);" onclick="hapusPelanggan('${c.id}')">Hapus</button>` : ''}
     </td>
   </tr>`).join('')}</tbody>`;
 }
 function openPelangganModal(c){
+  const tambah = !c;
+  c = c || {id:'', nama:'', whatsapp:'', alamat:'', catatan:''};
+  document.getElementById('modalPelangganTitle').textContent = tambah ? 'Tambah Pelanggan' : 'Edit Data Pelanggan';
   document.getElementById('modalPelangganId').value = c.id;
   document.getElementById('modalPelangganNama').value = c.nama;
   document.getElementById('modalPelangganWa').value = c.whatsapp;
@@ -2031,11 +2065,22 @@ document.getElementById('modalPelangganSave').addEventListener('click', async ()
     alamat: document.getElementById('modalPelangganAlamat').value.trim(),
     catatan: document.getElementById('modalPelangganCatatan').value.trim()
   };
-  await api('updateCustomer', {pelanggan});
+  if(!pelanggan.nama || !pelanggan.whatsapp){ alert('Nama dan nomor WhatsApp wajib diisi.'); return; }
+  const res = await api(pelanggan.id ? 'updateCustomer' : 'addCustomer', {pelanggan});
+  if(res && res.status==='error'){ alert(res.message); return; }
   document.getElementById('modalPelanggan').classList.remove('show');
   await loadMasterData();
   loadPelanggan();
 });
+document.getElementById('addPelangganBtn').addEventListener('click', ()=>openPelangganModal());
+async function hapusPelanggan(id){
+  const c = (window.pelangganCache||[]).find(x=>x.id===id);
+  if(!confirm('Hapus pelanggan ' + (c?c.nama:'ini') + '?')) return;
+  const res = await api('deleteCustomer', {id});
+  if(res && res.status==='error'){ alert(res.message); return; }
+  await loadMasterData();
+  loadPelanggan();
+}
 function searchByCustomer(nama){
   switchView('riwayat');
   document.getElementById('filSearch').value = nama;
