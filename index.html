@@ -196,9 +196,14 @@ tr.clickable:hover{background:var(--green-light);}
     <button data-view="dashboard" class="active">Dashboard</button>
     <button data-view="pesananBaru">Input Pesanan</button>
     <button data-view="riwayat">Riwayat Pesanan</button>
-    <button data-view="masterdata" class="admin-only">Master Data</button>
+    <button data-view="masterdata" class="admin-only" id="tabMaster">Master Data ▾</button>
     <button data-view="labarugi" class="admin-only">Pengeluaran</button>
     <button data-view="laporan" class="admin-only" id="tabLaporan">Laporan ▾</button>
+  </div>
+  <div id="masterMenu" class="dropmenu no-print" hidden>
+    <button data-mastersub="produk">Produk</button>
+    <button data-mastersub="pelanggan">Pelanggan</button>
+    <button data-mastersub="promo">Promo</button>
   </div>
   <div id="laporanMenu" class="dropmenu no-print" hidden>
     <button data-lapsub="laporan">Laporan Penjualan</button>
@@ -311,12 +316,7 @@ tr.clickable:hover{background:var(--green-light);}
 
   <!-- MASTER DATA -->
   <section class="view" id="view-masterdata">
-    <h2>Master Data</h2>
-    <div class="tabs" style="background:var(--green-light);margin-top:14px;border-radius:12px;padding:4px;">
-      <button data-submaster="produk" class="submaster-btn active" style="color:var(--green-dark);border-radius:9px;">Produk</button>
-      <button data-submaster="pelanggan" class="submaster-btn" style="color:var(--green-dark);border-radius:9px;">Pelanggan</button>
-      <button data-submaster="promo" class="submaster-btn" style="color:var(--green-dark);border-radius:9px;">Promo</button>
-    </div>
+    <h2 id="masterTitle">Master Data: Produk</h2>
 
     <div class="submaster active" id="submaster-produk" style="margin-top:14px;">
       <div class="quickbtns" style="margin-top:0;"><button id="addProdukBtn">+ Tambah Produk</button></div>
@@ -1171,12 +1171,15 @@ function switchView(name){
   if(name==='dashboard') loadDashboard();
   if(name==='pesananBaru'){ loadMasterData().then(initOrderForm); }
   if(name==='riwayat') loadRiwayat();
-  if(name==='masterdata') switchSubMaster('produk');
+  if(name==='masterdata'){ const sub = pendingSubMaster || 'produk'; pendingSubMaster = null; switchSubMaster(sub); }
   if(name==='laporan') { setLaporanPreset('bulan'); }
   if(name==='labarugi') { setLabaRugiPreset('bulan'); }
   if(name==='labarugiBulanan') { loadRekapBulanan(); }
 }
+let pendingSubMaster = null;
+const NAMA_SUBMASTER = {produk:'Produk', pelanggan:'Pelanggan', promo:'Promo'};
 function switchSubMaster(name){
+  const jt = document.getElementById('masterTitle'); if(jt) jt.textContent = 'Master Data: ' + (NAMA_SUBMASTER[name]||name);
   document.querySelectorAll('.submaster').forEach(s=>{ s.style.display='none'; s.classList.remove('active'); });
   document.getElementById('submaster-'+name).style.display='block';
   document.getElementById('submaster-'+name).classList.add('active');
@@ -1187,24 +1190,32 @@ function switchSubMaster(name){
 }
 document.querySelectorAll('.submaster-btn').forEach(b=>b.addEventListener('click', ()=>switchSubMaster(b.dataset.submaster)));
 let orderFormOrigin = 'pesananBaru';
-function tutupMenuLaporan(){ const m=document.getElementById('laporanMenu'); if(m) m.hidden=true; }
-function toggleMenuLaporan(btn){
-  const m=document.getElementById('laporanMenu');
-  if(!m.hidden){ m.hidden=true; return; }
+function tutupMenuLaporan(){ ['laporanMenu','masterMenu'].forEach(id=>{ const m=document.getElementById(id); if(m) m.hidden=true; }); }
+function toggleDropMenu(menuId, btn, namaAktif){
+  const m=document.getElementById(menuId);
+  const sudahTerbuka = !m.hidden;
+  tutupMenuLaporan();
+  if(sudahTerbuka) return;
   const r=btn.getBoundingClientRect();
   m.hidden=false;
   const lebar=m.offsetWidth;
   m.style.top=(r.bottom+4)+'px';
   m.style.left=Math.max(8, Math.min(r.left, window.innerWidth-lebar-8))+'px';
-  const aktif=document.querySelector('.view.active');
-  const nama=aktif?aktif.id.replace(/^view-/,''):'';
-  m.querySelectorAll('button').forEach(x=>x.classList.toggle('active', x.dataset.lapsub===nama));
+  m.querySelectorAll('button').forEach(x=>x.classList.toggle('active', (x.dataset.lapsub||x.dataset.mastersub)===namaAktif));
 }
-document.addEventListener('click', e=>{ if(!e.target.closest('#laporanMenu') && !e.target.closest('#tabLaporan')) tutupMenuLaporan(); });
+function namaViewAktif(){ const a=document.querySelector('.view.active'); return a?a.id.replace(/^view-/,''):''; }
+function subMasterAktif(){ const a=document.querySelector('.submaster.active'); return a?a.id.replace(/^submaster-/,''):''; }
+document.addEventListener('click', e=>{ if(!e.target.closest('.dropmenu') && !e.target.closest('#tabLaporan') && !e.target.closest('#tabMaster')) tutupMenuLaporan(); });
 window.addEventListener('resize', tutupMenuLaporan);
 document.getElementById('tabs').addEventListener('scroll', tutupMenuLaporan);
+document.querySelectorAll('[data-mastersub]').forEach(b=>b.addEventListener('click', ()=>{
+  tutupMenuLaporan();
+  if(namaViewAktif()==='masterdata'){ switchSubMaster(b.dataset.mastersub); }
+  else { pendingSubMaster = b.dataset.mastersub; switchView('masterdata'); }
+}));
 document.querySelectorAll('#tabs button').forEach(b=>b.addEventListener('click', ()=>{
-  if(b.dataset.view==='laporan'){ toggleMenuLaporan(b); return; }
+  if(b.dataset.view==='laporan'){ toggleDropMenu('laporanMenu', b, namaViewAktif()); return; }
+  if(b.dataset.view==='masterdata'){ toggleDropMenu('masterMenu', b, namaViewAktif()==='masterdata' ? subMasterAktif() : ''); return; }
   if(b.dataset.view==='pesananBaru'){ editingOrderId=null; editingOrderData=null; orderFormOrigin = 'pesananBaru'; }
   switchView(b.dataset.view);
 }));
