@@ -190,6 +190,7 @@ tr.clickable:hover{background:var(--green-light);}
     <button data-view="pesananBaru">Input Pesanan</button>
     <button data-view="riwayat">Riwayat Pesanan</button>
     <button data-view="masterdata" class="admin-only">Master Data</button>
+    <button data-view="labarugi" class="admin-only">Pengeluaran</button>
     <button data-view="laporan" class="admin-only">Laporan</button>
   </div>
 
@@ -327,7 +328,6 @@ tr.clickable:hover{background:var(--green-light);}
     <div class="tabs" style="background:var(--green-light);margin-top:14px;border-radius:12px;padding:4px;">
       <button data-lapsub="laporan" class="submaster-btn active" style="color:var(--green-dark);border-radius:9px;">Laporan Penjualan</button>
       <button data-lapsub="labarugiBulanan" class="submaster-btn" style="color:var(--green-dark);border-radius:9px;">Laba Rugi Bulanan</button>
-      <button data-lapsub="labarugi" class="submaster-btn" style="color:var(--green-dark);border-radius:9px;">Pengeluaran</button>
     </div>
     <div class="filters" style="margin-top:14px;">
       <button class="btn btn-outline" data-preset="hari">Hari Ini</button>
@@ -355,7 +355,6 @@ tr.clickable:hover{background:var(--green-light);}
     <div class="tabs" style="background:var(--green-light);margin-top:14px;border-radius:12px;padding:4px;">
       <button data-lapsub="laporan" class="submaster-btn" style="color:var(--green-dark);border-radius:9px;">Laporan Penjualan</button>
       <button data-lapsub="labarugiBulanan" class="submaster-btn active" style="color:var(--green-dark);border-radius:9px;">Laba Rugi Bulanan</button>
-      <button data-lapsub="labarugi" class="submaster-btn" style="color:var(--green-dark);border-radius:9px;">Pengeluaran</button>
     </div>
     <div class="card" style="margin-top:14px;">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
@@ -367,14 +366,9 @@ tr.clickable:hover{background:var(--green-light);}
 
   </section>
 
-  <!-- PENGELUARAN (ringkasan laba rugi + catat pengeluaran) -->
+  <!-- PENGELUARAN (menu utama: ringkasan laba rugi + catat pengeluaran) -->
   <section class="view" id="view-labarugi">
-    <h2>Laporan</h2>
-    <div class="tabs" style="background:var(--green-light);margin-top:14px;border-radius:12px;padding:4px;">
-      <button data-lapsub="laporan" class="submaster-btn" style="color:var(--green-dark);border-radius:9px;">Laporan Penjualan</button>
-      <button data-lapsub="labarugiBulanan" class="submaster-btn" style="color:var(--green-dark);border-radius:9px;">Laba Rugi Bulanan</button>
-      <button data-lapsub="labarugi" class="submaster-btn active" style="color:var(--green-dark);border-radius:9px;">Pengeluaran</button>
-    </div>
+    <h2>Pengeluaran</h2>
     <div class="filters" style="margin-top:14px;">
       <button class="btn btn-outline" data-lrpreset="hari">Hari Ini</button>
       <button class="btn btn-outline" data-lrpreset="minggu">Minggu Ini</button>
@@ -576,6 +570,7 @@ let riwayatCache = [];
 
 /* ================= HELPERS ================= */
 function rupiah(n){ return 'Rp ' + Math.round(n||0).toLocaleString('id-ID',{timeZone:'Asia/Jakarta'}); }
+function angka(n){ return Math.round(n||0).toLocaleString('id-ID',{timeZone:'Asia/Jakarta'}); }
 function badgeClass(s){ return (s||'').replace(/\s+/g,'_').replace(/\//g,''); }
 function wibDateStr(d){
   d = d || new Date();
@@ -1168,7 +1163,7 @@ function switchView(name){
   if((name==='masterdata' || name==='laporan' || name==='labarugi' || name==='labarugiBulanan') && !isAdmin()){ name='dashboard'; }
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
-  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.view===((name==='labarugi'||name==='labarugiBulanan')?'laporan':name)));
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.view===(name==='labarugiBulanan'?'laporan':name)));
   if(name==='dashboard') loadDashboard();
   if(name==='pesananBaru'){ loadMasterData().then(initOrderForm); }
   if(name==='riwayat') loadRiwayat();
@@ -1303,7 +1298,7 @@ function renderDashTable(orders, tanggalLabel){
       <td class="mono">${o.nomor_pesanan}</td>
       <td>${new Date(o.tanggal_pesan || o.tanggal).toLocaleDateString('id-ID',{timeZone:'Asia/Jakarta'})}</td>
       <td>${o.nama_pelanggan}</td>
-      <td class="mono">${rupiah(o.total)}</td>
+      <td class="mono">${angka(o.total)}</td>
       <td><span class="badge st-${badgeClass(o.status_pesanan)}">${o.status_pesanan}</span></td>
       <td>${o.status_pesanan==='Dibatalkan' ? '<span style="color:var(--ink-soft);">—</span>' : `<span class="badge pay-${badgeClass(o.status_pembayaran)}">${o.status_pembayaran}</span>`}</td>
     </tr>`).join('');
@@ -1516,7 +1511,7 @@ function getOrderItemResults(){
 function renderOrderSummary(){
   const results = getOrderItemResults();
   const tbody = document.querySelector('#ordSummaryTable tbody');
-  tbody.innerHTML = results.length ? results.map(r=>`<tr><td>${r.produk.nama_produk}</td><td>${r.qty}</td><td class="mono">${rupiah(r.hargaNormal)}</td></tr>`).join('')
+  tbody.innerHTML = results.length ? results.map(r=>`<tr><td>${r.produk.nama_produk}</td><td>${r.qty}</td><td class="mono">${angka(r.hargaNormal)}</td></tr>`).join('')
     : '<tr><td colspan="3" class="empty-msg">Belum ada produk dipilih.</td></tr>';
   const subtotal = results.reduce((s,r)=>s+r.hargaNormal,0);
   const diskon = Number(document.getElementById('ordDiskon').value)||0;
@@ -1607,7 +1602,7 @@ async function loadRiwayat(){
     <td class="mono">${o.nomor_pesanan}</td>
     <td>${new Date(o.tanggal_pesan || o.tanggal).toLocaleDateString('id-ID',{timeZone:'Asia/Jakarta'})}</td>
     <td>${o.nama_pelanggan}</td>
-    <td class="mono">${rupiah(o.total)}</td>
+    <td class="mono">${angka(o.total)}</td>
     <td><span class="badge st-${badgeClass(o.status_pesanan)}">${o.status_pesanan}</span></td>
     <td>${o.status_pesanan==='Dibatalkan' ? '<span style="color:var(--ink-soft);">—</span>' : `<span class="badge pay-${badgeClass(o.status_pembayaran)}">${o.status_pembayaran}</span>`}</td>
   </tr>`).join('')}</tbody>`;
@@ -1656,7 +1651,7 @@ function renderDetail(){
 
       <h3 style="font-size:14px;margin:16px 0 6px;">Detail Produk</h3>
       <div class="tablewrap"><table><thead><tr><th>Produk</th><th>Qty</th><th>Subtotal</th></tr></thead>
-      <tbody>${items.map(it=>`<tr><td>${it.nama_produk}${it.keterangan?'<br><span style="color:var(--ink-soft);font-size:12px;">'+it.keterangan+'</span>':''}</td><td>${it.qty}</td><td class="mono">${rupiah(it.subtotal)}</td></tr>`).join('')}</tbody></table></div>
+      <tbody>${items.map(it=>`<tr><td>${it.nama_produk}${it.keterangan?'<br><span style="color:var(--ink-soft);font-size:12px;">'+it.keterangan+'</span>':''}</td><td>${it.qty}</td><td class="mono">${angka(it.subtotal)}</td></tr>`).join('')}</tbody></table></div>
 
       <div class="totals">
         <div class="row"><span>Total Pesanan</span><span class="mono">${rupiah(order.subtotal)}</span></div>
@@ -1756,7 +1751,7 @@ function viewInvoice(){
       </div>
       <p style="font-size:13.5px;"><b>Kepada:</b> ${order.nama_pelanggan}<br>${order.whatsapp}<br>${order.alamat||''}</p>
       <div class="tablewrap"><table><thead><tr><th>Produk</th><th>Harga</th><th>Qty</th><th>Subtotal</th></tr></thead>
-      <tbody>${items.map(it=>`<tr><td>${it.nama_produk}</td><td class="mono">${rupiah(it.harga_satuan)}</td><td>${it.qty}</td><td class="mono">${rupiah(it.subtotal)}</td></tr>`).join('')}</tbody></table></div>
+      <tbody>${items.map(it=>`<tr><td>${it.nama_produk}</td><td class="mono">${angka(it.harga_satuan)}</td><td>${it.qty}</td><td class="mono">${angka(it.subtotal)}</td></tr>`).join('')}</tbody></table></div>
       <div class="totals">
         <div class="row"><span>Subtotal</span><span class="mono">${rupiah(order.subtotal)}</span></div>
         <div class="row"><span>Diskon</span><span class="mono">-${rupiah(order.diskon)}</span></div>
@@ -1809,8 +1804,8 @@ async function loadProduk(){
     return `<tr>
     <td class="mono">${p.id}</td>
     <td>${p.nama_produk}<br><span style="color:var(--ink-soft);font-size:12px;">${p.deskripsi||''}</span></td>
-    <td>${p.tipe}</td><td>${p.isi_pcs}</td><td class="mono">${rupiah(p.harga_jual)}</td>
-    <td class="mono">${p.harga_reseller ? rupiah(p.harga_reseller) : '-'}</td>
+    <td>${p.tipe}</td><td>${p.isi_pcs}</td><td class="mono">${angka(p.harga_jual)}</td>
+    <td class="mono">${p.harga_reseller ? angka(p.harga_reseller) : '-'}</td>
     <td>${promo ? promo.nama : '<span style="color:var(--ink-soft);">-</span>'}</td>
     <td><span class="badge ${p.status==='aktif'?'pay-Lunas':'pay-Belum_Dibayar'}">${p.status}</span></td>
     <td><button class="btn btn-outline" onclick='editProduk(${JSON.stringify(p).replace(/'/g,"&apos;")})'>Edit</button></td>
@@ -1932,7 +1927,7 @@ async function loadPelanggan(){
   table.innerHTML = `<thead><tr><th>Nama</th><th>WhatsApp</th><th>Total Pesanan</th><th>Total Transaksi</th><th>Terakhir Pesan</th><th></th></tr></thead>
   <tbody>${res.pelanggan.map(c=>`<tr>
     <td>${c.nama}</td><td class="mono">${c.whatsapp}</td><td>${c.total_pesanan}</td>
-    <td class="mono">${rupiah(c.total_transaksi)}</td>
+    <td class="mono">${angka(c.total_transaksi)}</td>
     <td>${c.tanggal_terakhir ? new Date(c.tanggal_terakhir).toLocaleDateString('id-ID',{timeZone:'Asia/Jakarta'}) : '-'}</td>
     <td style="white-space:nowrap;">
       ${isAdmin() ? `<button class="btn btn-outline" onclick='openPelangganModal(${JSON.stringify(c).replace(/'/g,"&apos;")})'>Edit</button>` : ''}
@@ -2006,7 +2001,7 @@ function renderLapChart(chart, selectedKey){
 }
 function renderLapProdukTable(produkTerlaris){
   document.getElementById('lapProdukTable').innerHTML = `<thead><tr><th>Produk</th><th>Paket Terjual</th><th>PCS Terjual</th><th>Rp Terjual</th></tr></thead>
-    <tbody>${produkTerlaris.map(p=>`<tr><td>${p.nama}</td><td>${p.paketQty===null?'-':p.paketQty}</td><td>${p.pcsQty}</td><td class="mono">${rupiah(p.rupiah)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty-msg">Tidak ada data.</td></tr>'}</tbody>`;
+    <tbody>${produkTerlaris.map(p=>`<tr><td>${p.nama}</td><td>${p.paketQty===null?'-':p.paketQty}</td><td>${p.pcsQty}</td><td class="mono">${angka(p.rupiah)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty-msg">Tidak ada data.</td></tr>'}</tbody>`;
 }
 async function selectLaporanDate(dateKey, label){
   const res = await api('getReport', { tanggalMulai: dateKey, tanggalSelesai: dateKey });
@@ -2058,9 +2053,9 @@ async function loadRekapBulanan(){
     const kosong = !b.omzet && !b.beban;
     return `<tr${kosong?' style="opacity:.45;"':''}>
       <td>${NAMA_BULAN[b.bulan-1]}</td>
-      <td class="mono">${kosong?'-':rupiah(b.omzet)}</td>
-      <td class="mono">${kosong?'-':rupiah(b.beban)}</td>
-      <td class="mono" style="${warna(b.laba)}">${kosong?'-':rupiah(b.laba)}</td>
+      <td class="mono">${kosong?'-':angka(b.omzet)}</td>
+      <td class="mono">${kosong?'-':angka(b.beban)}</td>
+      <td class="mono" style="${warna(b.laba)}">${kosong?'-':angka(b.laba)}</td>
       <td class="mono" style="${warna(b.laba)}">${kosong?'-':fmtMargin(b.laba,b.omzet)}</td>
     </tr>`;
   }).join('');
@@ -2069,8 +2064,8 @@ async function loadRekapBulanan(){
     `<thead><tr><th>Bulan</th><th>Omzet</th><th>Beban</th><th>Laba Bersih</th><th>Margin</th></tr></thead>
      <tbody>${rows}
        <tr style="font-weight:700;border-top:2px solid var(--line);">
-         <td>Total ${res.tahun}</td><td class="mono">${rupiah(tOmzet)}</td><td class="mono">${rupiah(tBeban)}</td>
-         <td class="mono" style="${warna(tLaba)}">${rupiah(tLaba)}</td><td class="mono" style="${warna(tLaba)}">${fmtMargin(tLaba,tOmzet)}</td>
+         <td>Total ${res.tahun}</td><td class="mono">${angka(tOmzet)}</td><td class="mono">${angka(tBeban)}</td>
+         <td class="mono" style="${warna(tLaba)}">${angka(tLaba)}</td><td class="mono" style="${warna(tLaba)}">${fmtMargin(tLaba,tOmzet)}</td>
        </tr></tbody>`;
 }
 
@@ -2095,7 +2090,7 @@ async function loadLabaRugi(){
   }
 
   document.getElementById('lrKategoriTable').innerHTML = res.bebanPerKategori.length
-    ? `<thead><tr><th>Kategori</th><th>Jumlah</th><th>Kontribusi</th></tr></thead><tbody>${res.bebanPerKategori.map(k=>`<tr><td>${k.kategori}</td><td class="mono">${rupiah(k.jumlah)}</td><td class="mono">${res.totalBeban>0?(k.jumlah/res.totalBeban*100).toFixed(1):'0'}%</td></tr>`).join('')}</tbody>`
+    ? `<thead><tr><th>Kategori</th><th>Jumlah</th><th>Kontribusi</th></tr></thead><tbody>${res.bebanPerKategori.map(k=>`<tr><td>${k.kategori}</td><td class="mono">${angka(k.jumlah)}</td><td class="mono">${res.totalBeban>0?(k.jumlah/res.totalBeban*100).toFixed(1):'0'}%</td></tr>`).join('')}</tbody>`
     : '<tbody><tr><td class="empty-msg">Belum ada pengeluaran di rentang ini.</td></tr></tbody>';
 
   document.getElementById('lrExpenseTable').innerHTML = res.pengeluaran.length
@@ -2104,7 +2099,7 @@ async function loadLabaRugi(){
           <td>${new Date(e.tanggal).toLocaleDateString('id-ID',{timeZone:'Asia/Jakarta'})}</td>
           <td>${e.kategori}</td>
           <td>${e.keterangan||'-'}</td>
-          <td class="mono">${rupiah(e.jumlah)}</td>
+          <td class="mono">${angka(e.jumlah)}</td>
           <td style="white-space:nowrap;">
             <button class="btn btn-outline" onclick='openEditPengeluaran(${JSON.stringify(e).replace(/'/g,"&apos;")})'>Edit</button>
             <button class="btn btn-outline" onclick="hapusPengeluaran('${e.id}')">Hapus</button>
