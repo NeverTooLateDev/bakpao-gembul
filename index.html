@@ -326,7 +326,8 @@ tr.clickable:hover{background:var(--green-light);}
     <h2>Laporan</h2>
     <div class="tabs" style="background:var(--green-light);margin-top:14px;border-radius:12px;padding:4px;">
       <button data-lapsub="laporan" class="submaster-btn active" style="color:var(--green-dark);border-radius:9px;">Laporan Penjualan</button>
-      <button data-lapsub="labarugi" class="submaster-btn" style="color:var(--green-dark);border-radius:9px;">Laba Rugi</button>
+      <button data-lapsub="labarugiBulanan" class="submaster-btn" style="color:var(--green-dark);border-radius:9px;">Laba Rugi Bulanan</button>
+      <button data-lapsub="labarugi" class="submaster-btn" style="color:var(--green-dark);border-radius:9px;">Pengeluaran</button>
     </div>
     <div class="filters" style="margin-top:14px;">
       <button class="btn btn-outline" data-preset="hari">Hari Ini</button>
@@ -348,12 +349,31 @@ tr.clickable:hover{background:var(--green-light);}
     </div>
   </section>
 
-  <!-- LABA RUGI -->
+  <!-- LABA RUGI BULANAN -->
+  <section class="view" id="view-labarugiBulanan">
+    <h2>Laporan</h2>
+    <div class="tabs" style="background:var(--green-light);margin-top:14px;border-radius:12px;padding:4px;">
+      <button data-lapsub="laporan" class="submaster-btn" style="color:var(--green-dark);border-radius:9px;">Laporan Penjualan</button>
+      <button data-lapsub="labarugiBulanan" class="submaster-btn active" style="color:var(--green-dark);border-radius:9px;">Laba Rugi Bulanan</button>
+      <button data-lapsub="labarugi" class="submaster-btn" style="color:var(--green-dark);border-radius:9px;">Pengeluaran</button>
+    </div>
+    <div class="card" style="margin-top:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+        <h3 style="font-size:15px;">Laba Rugi per Bulan</h3>
+        <select id="lrRekapTahun" style="width:auto;"></select>
+      </div>
+      <div class="tablewrap"><table id="lrRekapTable"></table></div>
+    </div>
+
+  </section>
+
+  <!-- PENGELUARAN (ringkasan laba rugi + catat pengeluaran) -->
   <section class="view" id="view-labarugi">
     <h2>Laporan</h2>
     <div class="tabs" style="background:var(--green-light);margin-top:14px;border-radius:12px;padding:4px;">
       <button data-lapsub="laporan" class="submaster-btn" style="color:var(--green-dark);border-radius:9px;">Laporan Penjualan</button>
-      <button data-lapsub="labarugi" class="submaster-btn active" style="color:var(--green-dark);border-radius:9px;">Laba Rugi</button>
+      <button data-lapsub="labarugiBulanan" class="submaster-btn" style="color:var(--green-dark);border-radius:9px;">Laba Rugi Bulanan</button>
+      <button data-lapsub="labarugi" class="submaster-btn active" style="color:var(--green-dark);border-radius:9px;">Pengeluaran</button>
     </div>
     <div class="filters" style="margin-top:14px;">
       <button class="btn btn-outline" data-lrpreset="hari">Hari Ini</button>
@@ -371,14 +391,6 @@ tr.clickable:hover{background:var(--green-light);}
         <div class="row final" style="font-size:22px;"><span>Laba Bersih</span><span class="mono" id="lrLabaBersih">Rp 0</span></div>
         <div class="row" style="margin-top:2px;"><span style="color:var(--ink-soft);font-size:13px;">Margin Laba Bersih</span><span class="mono" id="lrMargin" style="font-size:14px;font-weight:600;">0%</span></div>
       </div>
-    </div>
-
-    <div class="card" style="margin-top:14px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
-        <h3 style="font-size:15px;">Rekap Bulan ke Bulan</h3>
-        <select id="lrRekapTahun" style="width:auto;"></select>
-      </div>
-      <div class="tablewrap"><table id="lrRekapTable"></table></div>
     </div>
 
     <div class="grid grid-2" style="margin-top:14px;align-items:start;">
@@ -1153,16 +1165,17 @@ function applyRolePermissions(){
 
 /* ================= NAV ================= */
 function switchView(name){
-  if((name==='masterdata' || name==='laporan' || name==='labarugi') && !isAdmin()){ name='dashboard'; }
+  if((name==='masterdata' || name==='laporan' || name==='labarugi' || name==='labarugiBulanan') && !isAdmin()){ name='dashboard'; }
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
-  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.view===(name==='labarugi'?'laporan':name)));
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.view===((name==='labarugi'||name==='labarugiBulanan')?'laporan':name)));
   if(name==='dashboard') loadDashboard();
   if(name==='pesananBaru'){ loadMasterData().then(initOrderForm); }
   if(name==='riwayat') loadRiwayat();
   if(name==='masterdata') switchSubMaster('produk');
   if(name==='laporan') { setLaporanPreset('bulan'); }
   if(name==='labarugi') { setLabaRugiPreset('bulan'); }
+  if(name==='labarugiBulanan') { loadRekapBulanan(); }
 }
 function switchSubMaster(name){
   document.querySelectorAll('.submaster').forEach(s=>{ s.style.display='none'; s.classList.remove('active'); });
@@ -2062,7 +2075,6 @@ async function loadRekapBulanan(){
 }
 
 async function loadLabaRugi(){
-  loadRekapBulanan();
   const payload = { tanggalMulai: document.getElementById('lrMulai').value, tanggalSelesai: document.getElementById('lrSelesai').value };
   const res = await api('getLabaRugi', payload);
   if(res.status!=='ok') return;
