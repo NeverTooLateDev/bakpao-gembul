@@ -287,6 +287,7 @@ tr.clickable:hover{background:var(--green-light);}
 
   <!-- RIWAYAT PESANAN -->
   <section class="view" id="view-riwayat">
+    <button class="back-link no-print" id="riwayatBackBtn" style="display:none;">← Kembali ke Master Data: Pelanggan</button>
     <h2>Riwayat Pesanan</h2>
     <div class="filters" style="margin-top:14px;">
       <input type="text" id="filSearch" placeholder="Cari nama / nomor pesanan...">
@@ -562,7 +563,12 @@ tr.clickable:hover{background:var(--green-light);}
   <div class="modal">
     <h3 id="modalPelangganTitle">Edit Data Pelanggan</h3>
     <input type="hidden" id="modalPelangganId">
-    <div class="field"><label>Nama</label><input type="text" id="modalPelangganNama"></div>
+    <div class="field"><label>Nama</label>
+      <div style="display:flex;gap:6px;">
+        <input type="text" id="modalPelangganNama" style="flex:1;">
+        <button type="button" class="btn btn-outline" id="modalPelangganKontakBtn" style="display:none;white-space:nowrap;">📱 Kontak</button>
+      </div>
+    </div>
     <div class="field"><label>Nomor WhatsApp</label><input type="tel" id="modalPelangganWa"></div>
     <div class="field"><label>Alamat</label><textarea id="modalPelangganAlamat"></textarea></div>
     <div class="field"><label>Catatan</label><input type="text" id="modalPelangganCatatan"></div>
@@ -1239,6 +1245,7 @@ function applyRolePermissions(){
 /* ================= NAV ================= */
 function switchView(name){
   tutupMenuLaporan();
+  if(name!=='riwayat' && name!=='detail' && name!=='invoice') riwayatDariPelanggan = false;
   if((name==='masterdata' || name==='laporan' || name==='labarugi' || name==='labarugiBulanan' || name==='laporanCustomer') && !isAdmin()){ name='dashboard'; }
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
@@ -1246,6 +1253,7 @@ function switchView(name){
   if(name==='dashboard') loadDashboard();
   if(name==='pesananBaru'){ loadMasterData().then(initOrderForm); }
   if(name==='riwayat') loadRiwayat();
+  { const rb = document.getElementById('riwayatBackBtn'); if(rb) rb.style.display = (name==='riwayat' && riwayatDariPelanggan) ? '' : 'none'; }
   if(name==='masterdata'){ const sub = pendingSubMaster || 'produk'; pendingSubMaster = null; switchSubMaster(sub); }
   if(name==='laporan') { setLaporanPreset('bulan'); }
   if(name==='labarugi') { setLabaRugiPreset('bulan'); }
@@ -1253,6 +1261,7 @@ function switchView(name){
   if(name==='laporanCustomer') { initLaporanCustomer(); }
 }
 let pendingSubMaster = null;
+let riwayatDariPelanggan = false;
 const NAMA_SUBMASTER = {produk:'Produk', pelanggan:'Pelanggan', promo:'Promo'};
 function switchSubMaster(name){
   const jt = document.getElementById('masterTitle'); if(jt) jt.textContent = 'Master Data: ' + (NAMA_SUBMASTER[name]||name);
@@ -1290,12 +1299,14 @@ document.querySelectorAll('[data-mastersub]').forEach(b=>b.addEventListener('cli
   else { pendingSubMaster = b.dataset.mastersub; switchView('masterdata'); }
 }));
 document.querySelectorAll('#tabs button').forEach(b=>b.addEventListener('click', ()=>{
+  if(b.dataset.view==='riwayat') riwayatDariPelanggan = false;
   if(b.dataset.view==='laporan'){ toggleDropMenu('laporanMenu', b, namaViewAktif()); return; }
   if(b.dataset.view==='masterdata'){ toggleDropMenu('masterMenu', b, namaViewAktif()==='masterdata' ? subMasterAktif() : ''); return; }
   if(b.dataset.view==='pesananBaru'){ editingOrderId=null; editingOrderData=null; orderFormOrigin = 'pesananBaru'; }
   switchView(b.dataset.view);
 }));
 document.querySelectorAll('[data-goto]').forEach(b=>b.addEventListener('click', ()=>{
+  if(b.dataset.goto==='riwayat') riwayatDariPelanggan = false;
   if(b.dataset.goto==='pesananBaru'){
     const aktif = document.querySelector('.view.active');
     const asal = aktif ? aktif.id.replace(/^view-/,'') : 'dashboard';
@@ -2049,6 +2060,7 @@ function openPelangganModal(c){
   const tambah = !c;
   c = c || {id:'', nama:'', whatsapp:'', alamat:'', catatan:''};
   document.getElementById('modalPelangganTitle').textContent = tambah ? 'Tambah Pelanggan' : 'Edit Data Pelanggan';
+  document.getElementById('modalPelangganKontakBtn').style.display = ('contacts' in navigator && 'ContactsManager' in window) ? 'inline-block' : 'none';
   document.getElementById('modalPelangganId').value = c.id;
   document.getElementById('modalPelangganNama').value = c.nama;
   document.getElementById('modalPelangganWa').value = c.whatsapp;
@@ -2073,6 +2085,16 @@ document.getElementById('modalPelangganSave').addEventListener('click', async ()
   loadPelanggan();
 });
 document.getElementById('addPelangganBtn').addEventListener('click', ()=>openPelangganModal());
+document.getElementById('modalPelangganKontakBtn').addEventListener('click', async ()=>{
+  try{
+    const contacts = await navigator.contacts.select(['name','tel'], {multiple:false});
+    if(contacts && contacts.length){
+      const c = contacts[0];
+      if(c.name && c.name[0]) document.getElementById('modalPelangganNama').value = c.name[0];
+      if(c.tel && c.tel[0]) document.getElementById('modalPelangganWa').value = normalizeWa(c.tel[0]);
+    }
+  }catch(e){ /* dibatalkan / tidak didukung */ }
+});
 async function hapusPelanggan(id){
   const c = (window.pelangganCache||[]).find(x=>x.id===id);
   if(!confirm('Hapus pelanggan ' + (c?c.nama:'ini') + '?')) return;
@@ -2081,7 +2103,14 @@ async function hapusPelanggan(id){
   await loadMasterData();
   loadPelanggan();
 }
+document.getElementById('riwayatBackBtn').addEventListener('click', ()=>{
+  riwayatDariPelanggan = false;
+  document.getElementById('filSearch').value = '';
+  pendingSubMaster = 'pelanggan';
+  switchView('masterdata');
+});
 function searchByCustomer(nama){
+  riwayatDariPelanggan = true;
   switchView('riwayat');
   document.getElementById('filSearch').value = nama;
   loadRiwayat();
