@@ -191,7 +191,6 @@ tr.clickable:hover{background:var(--green-light);}
     <button data-view="riwayat">Riwayat Pesanan</button>
     <button data-view="masterdata" class="admin-only">Master Data</button>
     <button data-view="laporan" class="admin-only">Laporan</button>
-    <button data-view="labarugi" class="admin-only">Laba Rugi</button>
   </div>
 
   <!-- DASHBOARD -->
@@ -324,7 +323,11 @@ tr.clickable:hover{background:var(--green-light);}
 
   <!-- LAPORAN -->
   <section class="view" id="view-laporan">
-    <h2>Laporan Penjualan</h2>
+    <h2>Laporan</h2>
+    <div class="tabs" style="background:var(--green-light);margin-top:14px;border-radius:12px;padding:4px;">
+      <button data-lapsub="laporan" class="submaster-btn active" style="color:var(--green-dark);border-radius:9px;">Laporan Penjualan</button>
+      <button data-lapsub="labarugi" class="submaster-btn" style="color:var(--green-dark);border-radius:9px;">Laba Rugi</button>
+    </div>
     <div class="filters" style="margin-top:14px;">
       <button class="btn btn-outline" data-preset="hari">Hari Ini</button>
       <button class="btn btn-outline" data-preset="minggu">Minggu Ini</button>
@@ -347,7 +350,11 @@ tr.clickable:hover{background:var(--green-light);}
 
   <!-- LABA RUGI -->
   <section class="view" id="view-labarugi">
-    <h2>Laba Rugi</h2>
+    <h2>Laporan</h2>
+    <div class="tabs" style="background:var(--green-light);margin-top:14px;border-radius:12px;padding:4px;">
+      <button data-lapsub="laporan" class="submaster-btn" style="color:var(--green-dark);border-radius:9px;">Laporan Penjualan</button>
+      <button data-lapsub="labarugi" class="submaster-btn active" style="color:var(--green-dark);border-radius:9px;">Laba Rugi</button>
+    </div>
     <div class="filters" style="margin-top:14px;">
       <button class="btn btn-outline" data-lrpreset="hari">Hari Ini</button>
       <button class="btn btn-outline" data-lrpreset="minggu">Minggu Ini</button>
@@ -364,6 +371,14 @@ tr.clickable:hover{background:var(--green-light);}
         <div class="row final" style="font-size:22px;"><span>Laba Bersih</span><span class="mono" id="lrLabaBersih">Rp 0</span></div>
         <div class="row" style="margin-top:2px;"><span style="color:var(--ink-soft);font-size:13px;">Margin Laba Bersih</span><span class="mono" id="lrMargin" style="font-size:14px;font-weight:600;">0%</span></div>
       </div>
+    </div>
+
+    <div class="card" style="margin-top:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+        <h3 style="font-size:15px;">Rekap Bulan ke Bulan</h3>
+        <select id="lrRekapTahun" style="width:auto;"></select>
+      </div>
+      <div class="tablewrap"><table id="lrRekapTable"></table></div>
     </div>
 
     <div class="grid grid-2" style="margin-top:14px;align-items:start;">
@@ -1097,6 +1112,27 @@ async function api(action, payload){
         return {status:'ok', totalOmzet, totalBeban, labaBersih, bebanPerKategori, pengeluaran:expenses};
       }
 
+      case 'rekapBulanan': {
+        const tahun = String(payload.tahun || wibDateStr().slice(0,4));
+        const { data: allOrders } = await sb.from('pesanan').select('*');
+        const { data: allExpenses } = await sb.from('pengeluaran').select('*');
+        const bulan = [];
+        for(let m=1;m<=12;m++) bulan.push({bulan:m, omzet:0, beban:0});
+        (allOrders||[]).forEach(o=>{
+          if(o.status_pesanan==='Dibatalkan') return;
+          const k = String(tglEfektif(o)||'');
+          if(k.slice(0,4)!==tahun) return;
+          const m = Number(k.slice(5,7)); if(m>=1 && m<=12) bulan[m-1].omzet += Number(o.total||0);
+        });
+        (allExpenses||[]).forEach(e=>{
+          const k = String(e.tanggal||'');
+          if(k.slice(0,4)!==tahun) return;
+          const m = Number(k.slice(5,7)); if(m>=1 && m<=12) bulan[m-1].beban += Number(e.jumlah||0);
+        });
+        bulan.forEach(b=>{ b.laba = b.omzet - b.beban; });
+        return {status:'ok', tahun, bulan};
+      }
+
       default:
         return {status:'error', message:'Aksi tidak dikenal: '+action};
     }
@@ -1120,7 +1156,7 @@ function switchView(name){
   if((name==='masterdata' || name==='laporan' || name==='labarugi') && !isAdmin()){ name='dashboard'; }
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
-  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.view===name));
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.view===(name==='labarugi'?'laporan':name)));
   if(name==='dashboard') loadDashboard();
   if(name==='pesananBaru'){ loadMasterData().then(initOrderForm); }
   if(name==='riwayat') loadRiwayat();
@@ -1989,8 +2025,44 @@ function setLabaRugiPreset(preset){
 }
 document.querySelectorAll('[data-lrpreset]').forEach(b=>b.addEventListener('click', ()=>setLabaRugiPreset(b.dataset.lrpreset)));
 document.getElementById('lrApplyBtn').addEventListener('click', loadLabaRugi);
+document.querySelectorAll('[data-lapsub]').forEach(b=>b.addEventListener('click', ()=>switchView(b.dataset.lapsub)));
+const NAMA_BULAN = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+(function initRekapTahun(){
+  const sel = document.getElementById('lrRekapTahun');
+  const th = new Date().getFullYear();
+  for(let y=th; y>=th-3; y--){ const o=document.createElement('option'); o.value=y; o.textContent='Tahun '+y; sel.appendChild(o); }
+  sel.addEventListener('change', loadRekapBulanan);
+})();
+async function loadRekapBulanan(){
+  const tahun = document.getElementById('lrRekapTahun').value;
+  const res = await api('rekapBulanan', {tahun});
+  if(res.status!=='ok') return;
+  const fmtMargin = (laba, omzet)=> omzet>0 ? (laba/omzet*100).toLocaleString('id-ID',{minimumFractionDigits:1,maximumFractionDigits:1})+'%' : '-';
+  const warna = v => v<0 ? 'color:var(--red);' : '';
+  let tOmzet=0, tBeban=0;
+  const rows = res.bulan.map(b=>{
+    tOmzet+=b.omzet; tBeban+=b.beban;
+    const kosong = !b.omzet && !b.beban;
+    return `<tr${kosong?' style="opacity:.45;"':''}>
+      <td>${NAMA_BULAN[b.bulan-1]}</td>
+      <td class="mono">${kosong?'-':rupiah(b.omzet)}</td>
+      <td class="mono">${kosong?'-':rupiah(b.beban)}</td>
+      <td class="mono" style="${warna(b.laba)}">${kosong?'-':rupiah(b.laba)}</td>
+      <td class="mono" style="${warna(b.laba)}">${kosong?'-':fmtMargin(b.laba,b.omzet)}</td>
+    </tr>`;
+  }).join('');
+  const tLaba = tOmzet - tBeban;
+  document.getElementById('lrRekapTable').innerHTML =
+    `<thead><tr><th>Bulan</th><th>Omzet</th><th>Beban</th><th>Laba Bersih</th><th>Margin</th></tr></thead>
+     <tbody>${rows}
+       <tr style="font-weight:700;border-top:2px solid var(--line);">
+         <td>Total ${res.tahun}</td><td class="mono">${rupiah(tOmzet)}</td><td class="mono">${rupiah(tBeban)}</td>
+         <td class="mono" style="${warna(tLaba)}">${rupiah(tLaba)}</td><td class="mono" style="${warna(tLaba)}">${fmtMargin(tLaba,tOmzet)}</td>
+       </tr></tbody>`;
+}
 
 async function loadLabaRugi(){
+  loadRekapBulanan();
   const payload = { tanggalMulai: document.getElementById('lrMulai').value, tanggalSelesai: document.getElementById('lrSelesai').value };
   const res = await api('getLabaRugi', payload);
   if(res.status!=='ok') return;
