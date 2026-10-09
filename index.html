@@ -162,6 +162,13 @@ tr.clickable:hover{background:var(--green-light);}
   .view{max-width:100%;padding:0;}
   body{background:#fff;}
 }
+
+.dropmenu{position:fixed;z-index:60;background:var(--paper);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 28px rgba(31,77,55,0.18);padding:6px;min-width:190px;}
+.dropmenu[hidden]{display:none;}
+.dropmenu button{display:block;width:100%;text-align:left;background:transparent;border:none;padding:11px 14px;border-radius:8px;font-size:14px;font-weight:600;color:var(--green-dark);}
+.dropmenu button:hover{background:var(--green-light);}
+.dropmenu button.active{background:var(--green-light);}
+#lrRekapTable th:not(:first-child), #lrRekapTable td:not(:first-child){text-align:right;}
 </style>
 </head>
 <body>
@@ -191,7 +198,11 @@ tr.clickable:hover{background:var(--green-light);}
     <button data-view="riwayat">Riwayat Pesanan</button>
     <button data-view="masterdata" class="admin-only">Master Data</button>
     <button data-view="labarugi" class="admin-only">Pengeluaran</button>
-    <button data-view="laporan" class="admin-only">Laporan</button>
+    <button data-view="laporan" class="admin-only" id="tabLaporan">Laporan ▾</button>
+  </div>
+  <div id="laporanMenu" class="dropmenu no-print" hidden>
+    <button data-lapsub="laporan">Laporan Penjualan</button>
+    <button data-lapsub="labarugiBulanan">Laba Rugi Bulanan</button>
   </div>
 
   <!-- DASHBOARD -->
@@ -324,11 +335,7 @@ tr.clickable:hover{background:var(--green-light);}
 
   <!-- LAPORAN -->
   <section class="view" id="view-laporan">
-    <h2>Laporan</h2>
-    <div class="tabs" style="background:var(--green-light);margin-top:14px;border-radius:12px;padding:4px;">
-      <button data-lapsub="laporan" class="submaster-btn active" style="color:var(--green-dark);border-radius:9px;">Laporan Penjualan</button>
-      <button data-lapsub="labarugiBulanan" class="submaster-btn" style="color:var(--green-dark);border-radius:9px;">Laba Rugi Bulanan</button>
-    </div>
+    <h2>Laporan Penjualan</h2>
     <div class="filters" style="margin-top:14px;">
       <button class="btn btn-outline" data-preset="hari">Hari Ini</button>
       <button class="btn btn-outline" data-preset="minggu">Minggu Ini</button>
@@ -351,11 +358,7 @@ tr.clickable:hover{background:var(--green-light);}
 
   <!-- LABA RUGI BULANAN -->
   <section class="view" id="view-labarugiBulanan">
-    <h2>Laporan</h2>
-    <div class="tabs" style="background:var(--green-light);margin-top:14px;border-radius:12px;padding:4px;">
-      <button data-lapsub="laporan" class="submaster-btn" style="color:var(--green-dark);border-radius:9px;">Laporan Penjualan</button>
-      <button data-lapsub="labarugiBulanan" class="submaster-btn active" style="color:var(--green-dark);border-radius:9px;">Laba Rugi Bulanan</button>
-    </div>
+    <h2>Laba Rugi Bulanan</h2>
     <div class="card" style="margin-top:14px;">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
         <h3 style="font-size:15px;">Laba Rugi per Bulan</h3>
@@ -1160,6 +1163,7 @@ function applyRolePermissions(){
 
 /* ================= NAV ================= */
 function switchView(name){
+  tutupMenuLaporan();
   if((name==='masterdata' || name==='laporan' || name==='labarugi' || name==='labarugiBulanan') && !isAdmin()){ name='dashboard'; }
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
@@ -1183,7 +1187,24 @@ function switchSubMaster(name){
 }
 document.querySelectorAll('.submaster-btn').forEach(b=>b.addEventListener('click', ()=>switchSubMaster(b.dataset.submaster)));
 let orderFormOrigin = 'pesananBaru';
+function tutupMenuLaporan(){ const m=document.getElementById('laporanMenu'); if(m) m.hidden=true; }
+function toggleMenuLaporan(btn){
+  const m=document.getElementById('laporanMenu');
+  if(!m.hidden){ m.hidden=true; return; }
+  const r=btn.getBoundingClientRect();
+  m.hidden=false;
+  const lebar=m.offsetWidth;
+  m.style.top=(r.bottom+4)+'px';
+  m.style.left=Math.max(8, Math.min(r.left, window.innerWidth-lebar-8))+'px';
+  const aktif=document.querySelector('.view.active');
+  const nama=aktif?aktif.id.replace(/^view-/,''):'';
+  m.querySelectorAll('button').forEach(x=>x.classList.toggle('active', x.dataset.lapsub===nama));
+}
+document.addEventListener('click', e=>{ if(!e.target.closest('#laporanMenu') && !e.target.closest('#tabLaporan')) tutupMenuLaporan(); });
+window.addEventListener('resize', tutupMenuLaporan);
+document.getElementById('tabs').addEventListener('scroll', tutupMenuLaporan);
 document.querySelectorAll('#tabs button').forEach(b=>b.addEventListener('click', ()=>{
+  if(b.dataset.view==='laporan'){ toggleMenuLaporan(b); return; }
   if(b.dataset.view==='pesananBaru'){ editingOrderId=null; editingOrderData=null; orderFormOrigin = 'pesananBaru'; }
   switchView(b.dataset.view);
 }));
