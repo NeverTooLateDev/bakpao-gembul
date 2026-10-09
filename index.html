@@ -205,7 +205,7 @@ tr.clickable:hover{background:var(--green-light);}
       <button class="secondary admin-only" data-goto="laporan">Laporan Penjualan</button>
     </div>
     <div class="card">
-      <h3 style="font-size:15px;">Omzet: 7 Hari Terakhir & 3 Hari Kedepan</h3>
+      <h3 style="font-size:15px;">Omzet: 7 Hari Terakhir & Pesanan Mendatang</h3>
       <div class="chart-bars" id="dashChart"></div>
     </div>
     <div class="card" style="margin-top:14px;">
@@ -756,7 +756,17 @@ async function api(action, payload){
         const belumDibayar = ordersTodayAktif.filter(o=>o.status_pembayaran!=='Lunas').length;
         const terbaru = [...orders].sort((a,b)=>String(b.nomor_pesanan).localeCompare(String(a.nomor_pesanan))).slice(0,8);
         const chart = [];
-        for(let i=-6;i<=3;i++){
+        // default 3 hari ke depan; diperpanjang otomatis sampai tanggal pesanan terjauh (maks 30 hari)
+        let hariKedepan = 3;
+        orders.forEach(o=>{
+          if(o.status_pesanan==='Dibatalkan') return;
+          const k = tglEfektif(o);
+          if(!k || k<=todayKey) return;
+          const selisih = Math.round((Date.parse(k) - Date.parse(todayKey)) / 86400000);
+          if(selisih>hariKedepan) hariKedepan = selisih;
+        });
+        hariKedepan = Math.min(hariKedepan, 30);
+        for(let i=-6;i<=hariKedepan;i++){
           const d = new Date(); d.setDate(d.getDate()+i);
           const key = wibDateStr(d);
           const omzetHari = orders.filter(o=>tglEfektif(o)===key && o.status_pesanan!=='Dibatalkan').reduce((s,o)=>s+Number(o.total||0),0);
