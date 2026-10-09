@@ -163,6 +163,7 @@ tr.clickable:hover{background:var(--green-light);}
   body{background:#fff;}
 }
 
+.tbl-num{text-align:right !important;}
 .dropmenu{position:fixed;z-index:60;background:var(--paper);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 28px rgba(31,77,55,0.18);padding:6px;min-width:190px;}
 .dropmenu[hidden]{display:none;}
 .dropmenu button{display:block;width:100%;text-align:left;background:transparent;border:none;padding:11px 14px;border-radius:8px;font-size:14px;font-weight:600;color:var(--green-dark);}
@@ -196,9 +197,9 @@ tr.clickable:hover{background:var(--green-light);}
     <button data-view="dashboard" class="active">Dashboard</button>
     <button data-view="pesananBaru">Input Pesanan</button>
     <button data-view="riwayat">Riwayat Pesanan</button>
-    <button data-view="masterdata" class="admin-only" id="tabMaster">Master Data ▾</button>
     <button data-view="labarugi" class="admin-only">Pengeluaran</button>
     <button data-view="laporan" class="admin-only" id="tabLaporan">Laporan ▾</button>
+    <button data-view="masterdata" class="admin-only" id="tabMaster">Master Data ▾</button>
   </div>
   <div id="masterMenu" class="dropmenu no-print" hidden>
     <button data-mastersub="produk">Produk</button>
@@ -208,6 +209,7 @@ tr.clickable:hover{background:var(--green-light);}
   <div id="laporanMenu" class="dropmenu no-print" hidden>
     <button data-lapsub="laporan">Laporan Penjualan</button>
     <button data-lapsub="labarugiBulanan">Laba Rugi Bulanan</button>
+    <button data-lapsub="laporanCustomer">Laporan per Customer</button>
   </div>
 
   <!-- DASHBOARD -->
@@ -367,6 +369,24 @@ tr.clickable:hover{background:var(--green-light);}
       <div class="tablewrap"><table id="lrRekapTable"></table></div>
     </div>
 
+  </section>
+
+  <!-- LAPORAN PER CUSTOMER -->
+  <section class="view" id="view-laporanCustomer">
+    <h2>Laporan per Customer</h2>
+    <div class="filters" style="margin-top:14px;align-items:center;">
+      <input type="month" id="lcBulan" style="width:auto;">
+      <button class="btn btn-primary" id="lcApplyBtn">Tampilkan</button>
+    </div>
+    <div id="lcSummary" style="margin-top:12px;font-size:13px;color:var(--ink-soft);"></div>
+    <div class="card" style="margin-top:14px;">
+      <h3 style="font-size:15px;margin-bottom:8px;">Pembelian Terbanyak <span style="font-weight:500;color:var(--ink-soft);font-size:12px;">(berdasarkan total belanja)</span></h3>
+      <div class="tablewrap"><table id="lcTabelBelanja"></table></div>
+    </div>
+    <div class="card" style="margin-top:14px;">
+      <h3 style="font-size:15px;margin-bottom:8px;">Pesanan Terbanyak <span style="font-weight:500;color:var(--ink-soft);font-size:12px;">(berapa kali memesan)</span></h3>
+      <div class="tablewrap"><table id="lcTabelFrekuensi"></table></div>
+    </div>
   </section>
 
   <!-- PENGELUARAN (menu utama: ringkasan laba rugi + catat pengeluaran) -->
@@ -1122,6 +1142,32 @@ async function api(action, payload){
         return {status:'ok', totalOmzet, totalBeban, labaBersih, bebanPerKategori, pengeluaran:expenses};
       }
 
+      case 'laporanCustomer': {
+        const bulan = String(payload.bulan || wibDateStr().slice(0,7));
+        const { data: allOrders } = await sb.from('pesanan').select('*');
+        const orders = (allOrders||[]).filter(o=>o.status_pesanan!=='Dibatalkan' && String(tglEfektif(o)||'').slice(0,7)===bulan);
+        const orderIds = orders.map(o=>o.id);
+        const { data: allItems } = orderIds.length ? await sb.from('pesanan_item').select('*').in('order_id', orderIds) : {data:[]};
+        const { data: produkRows } = await sb.from('produk').select('*');
+        const pcsPerOrder = {};
+        (allItems||[]).forEach(it=>{
+          const info = (produkRows||[]).find(p=>p.id===it.product_id);
+          const isi = info && info.tipe==='paket' ? (Number(info.isi_pcs)||1) : 1;
+          pcsPerOrder[it.order_id] = (pcsPerOrder[it.order_id]||0) + Number(it.qty||0)*isi;
+        });
+        const perCust = {};
+        orders.forEach(o=>{
+          const key = o.customer_id ? 'id:'+o.customer_id : 'n:'+String(o.nama_pelanggan||'').trim().toLowerCase();
+          if(!perCust[key]) perCust[key] = { nama:o.nama_pelanggan||'(tanpa nama)', pesanan:0, pcs:0, total:0 };
+          const c = perCust[key];
+          c.pesanan += 1; c.total += Number(o.total||0); c.pcs += pcsPerOrder[o.id]||0;
+        });
+        const list = Object.keys(perCust).map(k=>perCust[k]);
+        const byBelanja = list.slice().sort((a,b)=>b.total-a.total || b.pesanan-a.pesanan).slice(0,10);
+        const byFrekuensi = list.slice().sort((a,b)=>b.pesanan-a.pesanan || b.total-a.total).slice(0,10);
+        return {status:'ok', bulan, jumlahCustomer:list.length, jumlahPesanan:orders.length, totalOmzet:orders.reduce((s,o)=>s+Number(o.total||0),0), byBelanja, byFrekuensi};
+      }
+
       case 'rekapBulanan': {
         const tahun = String(payload.tahun || wibDateStr().slice(0,4));
         const { data: allOrders } = await sb.from('pesanan').select('*');
@@ -1164,10 +1210,10 @@ function applyRolePermissions(){
 /* ================= NAV ================= */
 function switchView(name){
   tutupMenuLaporan();
-  if((name==='masterdata' || name==='laporan' || name==='labarugi' || name==='labarugiBulanan') && !isAdmin()){ name='dashboard'; }
+  if((name==='masterdata' || name==='laporan' || name==='labarugi' || name==='labarugiBulanan' || name==='laporanCustomer') && !isAdmin()){ name='dashboard'; }
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
-  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.view===(name==='labarugiBulanan'?'laporan':name)));
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.view===((name==='labarugiBulanan'||name==='laporanCustomer')?'laporan':name)));
   if(name==='dashboard') loadDashboard();
   if(name==='pesananBaru'){ loadMasterData().then(initOrderForm); }
   if(name==='riwayat') loadRiwayat();
@@ -1175,6 +1221,7 @@ function switchView(name){
   if(name==='laporan') { setLaporanPreset('bulan'); }
   if(name==='labarugi') { setLabaRugiPreset('bulan'); }
   if(name==='labarugiBulanan') { loadRekapBulanan(); }
+  if(name==='laporanCustomer') { initLaporanCustomer(); }
 }
 let pendingSubMaster = null;
 const NAMA_SUBMASTER = {produk:'Produk', pelanggan:'Pelanggan', promo:'Promo'};
@@ -2073,6 +2120,31 @@ const NAMA_BULAN = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Ag
   for(let y=th; y>=th-3; y--){ const o=document.createElement('option'); o.value=y; o.textContent='Tahun '+y; sel.appendChild(o); }
   sel.addEventListener('change', loadRekapBulanan);
 })();
+function initLaporanCustomer(){
+  const el = document.getElementById('lcBulan');
+  if(!el.value) el.value = todayKeyClient().slice(0,7);
+  loadLaporanCustomer();
+}
+document.getElementById('lcApplyBtn').addEventListener('click', loadLaporanCustomer);
+document.getElementById('lcBulan').addEventListener('change', loadLaporanCustomer);
+async function loadLaporanCustomer(){
+  const bulan = document.getElementById('lcBulan').value;
+  if(!bulan) return;
+  const res = await api('laporanCustomer', {bulan});
+  if(res.status!=='ok') return;
+  const [th, bl] = res.bulan.split('-');
+  document.getElementById('lcSummary').textContent =
+    `${NAMA_BULAN[Number(bl)-1]} ${th}: ${res.jumlahCustomer} customer, ${res.jumlahPesanan} pesanan, total ${rupiah(res.totalOmzet)}`;
+  const kosong = '<tbody><tr><td colspan="5" style="text-align:center;color:var(--ink-soft);">Belum ada pesanan di bulan ini</td></tr></tbody>';
+  document.getElementById('lcTabelBelanja').innerHTML = res.byBelanja.length
+    ? `<thead><tr><th>#</th><th>Pelanggan</th><th class="tbl-num">Total Belanja</th><th class="tbl-num">Pesanan</th><th class="tbl-num">Pcs</th></tr></thead>
+       <tbody>${res.byBelanja.map((c,i)=>`<tr><td>${i+1}</td><td>${c.nama}</td><td class="mono tbl-num">${angka(c.total)}</td><td class="mono tbl-num">${c.pesanan}</td><td class="mono tbl-num">${c.pcs}</td></tr>`).join('')}</tbody>`
+    : kosong;
+  document.getElementById('lcTabelFrekuensi').innerHTML = res.byFrekuensi.length
+    ? `<thead><tr><th>#</th><th>Pelanggan</th><th class="tbl-num">Pesanan (kali)</th><th class="tbl-num">Total Belanja</th><th class="tbl-num">Pcs</th></tr></thead>
+       <tbody>${res.byFrekuensi.map((c,i)=>`<tr><td>${i+1}</td><td>${c.nama}</td><td class="mono tbl-num">${c.pesanan}</td><td class="mono tbl-num">${angka(c.total)}</td><td class="mono tbl-num">${c.pcs}</td></tr>`).join('')}</tbody>`
+    : kosong;
+}
 async function loadRekapBulanan(){
   const tahun = document.getElementById('lrRekapTahun').value;
   const res = await api('rekapBulanan', {tahun});
