@@ -170,6 +170,9 @@ tr.clickable:hover{background:var(--green-light);}
 .dropmenu button:hover{background:var(--green-light);}
 .dropmenu button.active{background:var(--green-light);}
 #lrRekapTable th:not(:first-child), #lrRekapTable td:not(:first-child){text-align:right;}
+#lrRekapTable th, #lrRekapTable td{padding:9px 5px;font-size:12.5px;white-space:nowrap;}
+#lrRekapTable td.mono{font-size:12px;}
+#lrRekapTable th{font-size:11px;}
 </style>
 </head>
 <body>
@@ -365,7 +368,10 @@ tr.clickable:hover{background:var(--green-light);}
     <h2>Laba Rugi Bulanan</h2>
     <div class="card" style="margin-top:14px;">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
-        <h3 style="font-size:15px;">Laba Rugi per Bulan</h3>
+        <div>
+          <h3 style="font-size:15px;">Laba Rugi per Bulan</h3>
+          <div style="font-size:12px;color:var(--ink-soft);margin-top:2px;">Omzet hanya dari pesanan yang sudah dibayar</div>
+        </div>
         <select id="lrRekapTahun" style="width:auto;"></select>
       </div>
       <div class="tablewrap"><table id="lrRekapTable"></table></div>
@@ -405,7 +411,7 @@ tr.clickable:hover{background:var(--green-light);}
 
     <div class="card" style="padding-top:8px;padding-bottom:10px;">
       <div class="totals" style="border-top:none;padding-top:0;margin-top:0;">
-        <div class="row"><span>Pendapatan (Omzet)</span><span class="mono">Rp <span id="lrOmzet">0</span></span></div>
+        <div class="row"><span>Pendapatan (Omzet terbayar)</span><span class="mono">Rp <span id="lrOmzet">0</span></span></div>
         <div class="row" style="margin-top:8px;"><span>Beban Operasional</span><span class="mono">- Rp <span id="lrBeban">0</span></span></div>
         <div class="row final" style="font-size:22px;"><span>Laba Bersih</span><span class="mono" id="lrLabaBersih">Rp 0</span></div>
         <div class="row" style="margin-top:2px;"><span style="color:var(--ink-soft);font-size:13px;">Margin Laba Bersih</span><span class="mono" id="lrMargin" style="font-size:14px;font-weight:600;">0%</span></div>
@@ -628,6 +634,8 @@ function shortId(){
 }
 function yyMMdd(dateStr){ return dateStr.slice(2,4)+dateStr.slice(5,7)+dateStr.slice(8,10); }
 function tglEfektif(o){ return o.tanggal_pesan || o.tanggal; }
+// nilai yang benar-benar sudah dibayar (maks. sebesar total pesanan); dipakai untuk laba rugi
+function nilaiTerbayar(o){ return Math.min(Number(o.jumlah_dibayar||0), Number(o.total||0)); }
 
 /* ================= MESIN HITUNG HARGA (sama seperti versi lama) ================= */
 function hitungItemClient(tipeInput, hargaSatuan, inputValue, hargaReseller, isReseller, promo){
@@ -1160,7 +1168,7 @@ async function api(action, payload){
         if(payload.tanggalMulai) orders = orders.filter(o=>tglEfektif(o) >= payload.tanggalMulai);
         if(payload.tanggalSelesai) orders = orders.filter(o=>tglEfektif(o) <= payload.tanggalSelesai);
         orders = orders.filter(o=>o.status_pesanan!=='Dibatalkan');
-        const totalOmzet = orders.reduce((s,o)=>s+Number(o.total||0),0);
+        const totalOmzet = orders.reduce((s,o)=>s+nilaiTerbayar(o),0);
 
         const { data: allExpenses } = await sb.from('pengeluaran').select('*');
         let expenses = allExpenses||[];
@@ -1213,7 +1221,7 @@ async function api(action, payload){
           if(o.status_pesanan==='Dibatalkan') return;
           const k = String(tglEfektif(o)||'');
           if(k.slice(0,4)!==tahun) return;
-          const m = Number(k.slice(5,7)); if(m>=1 && m<=12) bulan[m-1].omzet += Number(o.total||0);
+          const m = Number(k.slice(5,7)); if(m>=1 && m<=12) bulan[m-1].omzet += nilaiTerbayar(o);
         });
         (allExpenses||[]).forEach(e=>{
           const k = String(e.tanggal||'');
@@ -2187,6 +2195,7 @@ function setLabaRugiPreset(preset){
 document.querySelectorAll('[data-lrpreset]').forEach(b=>b.addEventListener('click', ()=>setLabaRugiPreset(b.dataset.lrpreset)));
 document.getElementById('lrApplyBtn').addEventListener('click', loadLabaRugi);
 document.querySelectorAll('[data-lapsub]').forEach(b=>b.addEventListener('click', ()=>switchView(b.dataset.lapsub)));
+const NAMA_BULAN_PENDEK = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
 const NAMA_BULAN = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
 (function initRekapTahun(){
   const sel = document.getElementById('lrRekapTahun');
@@ -2230,7 +2239,7 @@ async function loadRekapBulanan(){
     tOmzet+=b.omzet; tBeban+=b.beban;
     const kosong = !b.omzet && !b.beban;
     return `<tr${kosong?' style="opacity:.45;"':''}>
-      <td>${NAMA_BULAN[b.bulan-1]}</td>
+      <td>${NAMA_BULAN_PENDEK[b.bulan-1]}</td>
       <td class="mono">${kosong?'-':angka(b.omzet)}</td>
       <td class="mono">${kosong?'-':angka(b.beban)}</td>
       <td class="mono" style="${warna(b.laba)}">${kosong?'-':angka(b.laba)}</td>
