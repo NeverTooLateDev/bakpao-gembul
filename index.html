@@ -170,9 +170,11 @@ tr.clickable:hover{background:var(--green-light);}
 .dropmenu button:hover{background:var(--green-light);}
 .dropmenu button.active{background:var(--green-light);}
 #lrRekapTable th:not(:first-child), #lrRekapTable td:not(:first-child){text-align:right;}
-#lrRekapTable th, #lrRekapTable td{padding:9px 5px;font-size:12.5px;white-space:nowrap;}
-#lrRekapTable td.mono{font-size:12px;}
-#lrRekapTable th{font-size:11px;}
+@media (max-width:600px){
+  #lrRekapTable th, #lrRekapTable td{padding:9px 5px;font-size:12.5px;white-space:nowrap;}
+  #lrRekapTable td.mono{font-size:12px;}
+  #lrRekapTable th{font-size:11px;}
+}
 </style>
 </head>
 <body>
