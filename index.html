@@ -1834,7 +1834,7 @@ document.getElementById('modalStatusSave').addEventListener('click', async ()=>{
   const status = document.getElementById('modalStatusSelect').value;
   await api('updateOrderStatus', {orderId:currentOrder.order.id, status});
   document.getElementById('modalStatus').classList.remove('show');
-  openDetail(currentOrder.order.id);
+  kembaliSetelahDetail();
 });
 
 function openBayarModal(){
@@ -1854,12 +1854,12 @@ document.getElementById('modalBayarSave').addEventListener('click', async ()=>{
   };
   await api('addPayment', payload);
   document.getElementById('modalBayar').classList.remove('show');
-  openDetail(currentOrder.order.id);
+  openDetail(currentOrder.order.id, detailSourceView);
 });
 
 async function buatInvoice(){
   const res = await api('createInvoice', {orderId: currentOrder.order.id});
-  if(res.status==='ok'){ await openDetail(currentOrder.order.id); viewInvoice(); }
+  if(res.status==='ok'){ await openDetail(currentOrder.order.id, detailSourceView); viewInvoice(); }
   else alert(res.message);
 }
 function viewInvoice(){
