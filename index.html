@@ -139,12 +139,18 @@ tr.clickable:hover{background:var(--green-light);}
 .back-link{background:none;border:none;color:var(--green-dark);font-weight:600;font-size:13.5px;padding:0;margin-bottom:14px;}
 
 /* invoice */
-.invoice-box{border:1px solid var(--line);border-radius:14px;padding:26px;background:#fff;}
+.invoice-box{border:1px solid #B9E0C4;border-radius:14px;padding:22px;background:#fff;}
+.invoice-head .meta b{white-space:nowrap;}
+.invoice-box table th, .invoice-box table td{padding:9px 6px;}
+.invoice-box table th:not(:first-child), .invoice-box table td:not(:first-child){white-space:nowrap;}
+.invoice-box table th:nth-child(n+2), .invoice-box table td:nth-child(n+2){text-align:right;}
+.invoice-box table td:first-child{min-width:130px;}
+.invoice-box .thankyou{white-space:nowrap;font-size:13.5px;}
 .invoice-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px dashed var(--line);padding-bottom:16px;margin-bottom:16px;}
 .invoice-head .biz{display:flex;gap:10px;align-items:center;}
 .invoice-head .biz h2{font-size:19px;}
 .invoice-head .meta{text-align:right;font-size:13px;color:var(--ink-soft);}
-.invoice-head .meta b{color:var(--green-dark);font-family:'JetBrains Mono',monospace;font-size:15px;}
+.invoice-head .meta b{color:var(--green-dark);font-family:'JetBrains Mono',monospace;font-size:14px;}
 .thankyou{margin-top:18px;text-align:center;font-family:'Fredoka',sans-serif;color:var(--green-dark);font-size:14px;padding-top:14px;border-top:1px dashed var(--line);}
 
 .submaster-btn{background:transparent;}
@@ -1904,7 +1910,14 @@ async function kirimInvoiceGambar(){
   if(typeof html2canvas === 'undefined'){ alert('Fitur gambar belum termuat. Cek koneksi internet lalu muat ulang halaman, atau pakai "Kirim sebagai teks".'); return; }
   btn.disabled = true; btn.textContent = 'Membuat gambar...';
   try{
-    const canvas = await html2canvas(el, {scale:2, backgroundColor:'#ffffff', useCORS:true, logging:false});
+    const klon = el.cloneNode(true);
+    klon.style.cssText = 'position:fixed;left:-9999px;top:0;width:480px;max-width:none;box-sizing:border-box;';
+    klon.querySelectorAll('.tablewrap').forEach(t=>{ t.style.overflow='visible'; });
+    document.body.appendChild(klon);
+    let canvas;
+    try{
+      canvas = await html2canvas(klon, {scale:2, backgroundColor:'#ffffff', useCORS:true, logging:false, windowWidth:900});
+    } finally { klon.remove(); }
     const blob = await new Promise(res=>canvas.toBlob(res,'image/png'));
     if(!blob) throw new Error('Gagal membuat gambar');
     const namaFile = (inv.nomor_invoice || 'invoice') + '.png';
