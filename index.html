@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Bakpao Ijo Gembul — Sistem Pencatatan Penjualan</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
@@ -316,8 +317,8 @@ tr.clickable:hover{background:var(--green-light);}
   <section class="view" id="view-invoice">
     <button class="back-link no-print" data-goto="detail">← Kembali</button>
     <div class="quickbtns no-print" style="margin-top:0;">
-      <button id="printInvoiceBtn">🖨️ Cetak / Download PDF</button>
       <button class="secondary btn-wa" id="waInvoiceBtn" style="background:#25D366;color:#fff;">Kirim Invoice via WhatsApp</button>
+      <button class="secondary" id="waInvoiceTextBtn">Kirim sebagai teks</button>
     </div>
     <div id="invoiceContent"></div>
   </section>
@@ -1892,8 +1893,50 @@ function viewInvoice(){
       <div class="thankyou">Terima kasih telah memesan Bakpao Ijo Gembul 🙏</div>
     </div>`;
 }
-document.getElementById('printInvoiceBtn').addEventListener('click', ()=>window.print());
-document.getElementById('waInvoiceBtn').addEventListener('click', ()=>{
+document.getElementById('waInvoiceBtn').addEventListener('click', kirimInvoiceGambar);
+async function kirimInvoiceGambar(){
+  const btn = document.getElementById('waInvoiceBtn');
+  const teksAwal = btn.textContent;
+  const {order, invoices} = currentOrder;
+  const inv = invoices[0];
+  const el = document.querySelector('#invoiceContent .invoice-box');
+  if(!el){ alert('Invoice belum siap.'); return; }
+  if(typeof html2canvas === 'undefined'){ alert('Fitur gambar belum termuat. Cek koneksi internet lalu muat ulang halaman, atau pakai "Kirim sebagai teks".'); return; }
+  btn.disabled = true; btn.textContent = 'Membuat gambar...';
+  try{
+    const canvas = await html2canvas(el, {scale:2, backgroundColor:'#ffffff', useCORS:true, logging:false});
+    const blob = await new Promise(res=>canvas.toBlob(res,'image/png'));
+    if(!blob) throw new Error('Gagal membuat gambar');
+    const namaFile = (inv.nomor_invoice || 'invoice') + '.png';
+    const file = new File([blob], namaFile, {type:'image/png'});
+    // HP: menu bagikan (pilih WhatsApp lalu chat pelanggan)
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      try{
+        await navigator.share({files:[file], title:'Invoice '+inv.nomor_invoice, text:'Invoice '+inv.nomor_invoice});
+      }catch(e){ if(e && e.name!=='AbortError') throw e; }
+      return;
+    }
+    // Laptop: salin ke clipboard (atau unduh), lalu buka chat WhatsApp pelanggan
+    let pesan = '';
+    try{
+      await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
+      pesan = 'Gambar invoice sudah disalin. Tempel (Ctrl+V) di chat WhatsApp lalu kirim.';
+    }catch(e){
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = namaFile;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+      pesan = 'Gambar invoice sudah diunduh. Lampirkan file ' + namaFile + ' di chat WhatsApp.';
+    }
+    window.open('https://wa.me/' + normalizeWa(order.whatsapp), '_blank');
+    alert(pesan);
+  }catch(err){
+    alert('Gagal membuat gambar invoice: ' + (err && err.message ? err.message : err) + '\nCoba "Kirim sebagai teks".');
+  }finally{
+    btn.disabled = false; btn.textContent = teksAwal;
+  }
+}
+document.getElementById('waInvoiceTextBtn').addEventListener('click', ()=>{
   const {order, invoices} = currentOrder;
   const inv = invoices[0];
   const msg = `Halo Kak *${order.nama_pelanggan}*,\nInvoice pesanan Anda sudah kami buat. 📄\n\n_Nomor Invoice:_ *${inv.nomor_invoice}*\n*Total Tagihan:* ${rupiah(inv.total_tagihan)}\n_Status Pembayaran:_ *${order.status_pembayaran}*\n\nTerima kasih telah memesan Bakpao Ijo Gembul 🙏`;
